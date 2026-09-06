@@ -132,7 +132,9 @@ namespace ElectroCalc.Core.Solvers
                         if (settings.Mode == CircuitAnalysisMode.AC)
                         {
                             double c = Math.Max(0.0, e.Value);
-                            if (c <= Eps)
+                            // Capacitance is a physical value, not a numerical residual:
+                            // positive pF/sub-pF components must not be rounded to zero.
+                            if (c <= 0)
                                 throw new InvalidOperationException($"Ёмкость {e.Name} должна быть больше 0 Ф в AC-режиме.");
                             z += Complex.One / (Complex.ImaginaryOne * w * c);
                         }

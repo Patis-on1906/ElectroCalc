@@ -231,6 +231,51 @@ public class AcSolverTests
     }
 
     [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void ShortCalculationHandlesCurrentFeedInEitherDirection(bool reversed)
+    {
+        var g = Graph();
+        var feed = Branch(g, reversed ? 1 : 0, reversed ? 0 : 1, E(ElementType.CurrentSource, 2, 30, 1));
+        var l1 = Branch(g, 0, 1, E(ElementType.Resistor, 3), E(ElementType.Inductor, 4 / (100 * Math.PI)));
+        var l2 = Branch(g, 1, 0, E(ElementType.Resistor, 5), E(ElementType.Capacitor, 1 / (200 * Math.PI)));
+        Complex z1 = new(3, 4), z2 = new(5, -2);
+        Complex u = (reversed ? 1 : -1) * Polar(2, 30) * z1 * z2 / (z1 + z2);
+        var settings = Ac();
+        var result = new ThreeBranchSimplifiedSolver(g, settings, ThreeBranchSimplifiedDetector.Detect(g, settings)!).Solve();
+        Healthy(g, result);
+        Near(Polar(2, 30), Row(result, feed).CurrentPhasor);
+        Near(u / z1, Row(result, l1).CurrentPhasor);
+        Near(-u / z2, Row(result, l2).CurrentPhasor);
+    }
+
+    [Fact]
+    public void ShortCalculationRejectsCurrentFedLosslessParallelResonance()
+    {
+        var g = Graph();
+        Branch(g, 0, 1, E(ElementType.CurrentSource, 2));
+        Branch(g, 0, 1, E(ElementType.Inductor, 1));
+        Branch(g, 0, 1, E(ElementType.Capacitor, 1));
+        var settings = Ac(1 / (2 * Math.PI));
+        var result = new ThreeBranchSimplifiedSolver(g, settings, ThreeBranchSimplifiedDetector.Detect(g, settings)!).Solve();
+        Assert.False(result.Success);
+        Assert.Contains("резонанс", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void ShortDcCalculationStillMatchesParallelResistance()
+    {
+        var g = Graph();
+        Branch(g, 0, 1, E(ElementType.VoltageSource, 10, 0, 1));
+        var l1 = Branch(g, 0, 1, E(ElementType.Resistor, 6));
+        var l2 = Branch(g, 0, 1, E(ElementType.Resistor, 3));
+        var settings = new CircuitAnalysisSettings();
+        var result = new ThreeBranchSimplifiedSolver(g, settings, ThreeBranchSimplifiedDetector.Detect(g, settings)!).Solve();
+        Healthy(g, result);
+        Near(10.0 / 9, Row(result, l1).CurrentPhasor);
+        Near(20.0 / 9, Row(result, l2).CurrentPhasor);
+    }
+
+    [Theory]
     [InlineData(0)] [InlineData(2)]
     public void TheveninAccountsForSourceInLoadAndZeroInputImpedance(double internalR)
     {
