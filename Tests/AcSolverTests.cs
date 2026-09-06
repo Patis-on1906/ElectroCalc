@@ -173,6 +173,107 @@ public class AcSolverTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EtalonLabCircuitMatchesDocumentCurrentsVoltagesAndPower(bool mesh)
+    {
+        // Исходные данные и ожидаемые результаты взяты из эталонного документа
+        // «АБс-426_Гапон_Бекренёв_ЛР2(1).docx», а не со снимка схемы.
+        // В документе принято округлённое omega=314 рад/с.
+        var settings = Ac(314.0 / (2 * Math.PI));
+        var g = Graph(6); // индексы 0..5 соответствуют узлам 1..6 эталона
+
+        CircuitElement Part(string name, ElementType type, double value, double phase = 0)
+        {
+            var element = E(type, value, phase);
+            element.Name = name;
+            return element;
+        }
+
+        var b1 = Branch(g, 4, 2, Part("R1", ElementType.Resistor, 50));
+        var b2 = Branch(g, 5, 3,
+            Part("R2", ElementType.Resistor, 60),
+            Part("C2", ElementType.Capacitor, 15e-6));
+        var b3 = Branch(g, 3, 2, Part("R3", ElementType.Resistor, 78));
+        var b4 = Branch(g, 2, 1,
+            Part("R4", ElementType.Resistor, 76),
+            Part("C4", ElementType.Capacitor, 60e-6));
+        var b5 = Branch(g, 3, 1,
+            Part("R5", ElementType.Resistor, 25),
+            Part("L5", ElementType.Inductor, 0.32));
+
+        var e6 = Part("E6", ElementType.VoltageSource, 100, 75);
+        e6.IsPositiveAtStart = false; // E6 направлена противоположно I6
+        var b6 = Branch(g, 0, 4, e6,
+            Part("R6", ElementType.Resistor, 45),
+            Part("L6", ElementType.Inductor, 0.32));
+        var b7 = Branch(g, 0, 1, Part("R7", ElementType.Resistor, 25));
+        var b8 = Branch(g, 4, 5,
+            Part("L8", ElementType.Inductor, 0.4),
+            Part("R8", ElementType.Resistor, 45));
+
+        // На вертикальном элементе порт A находится сверху (узел 2), B снизу
+        // (узел 1). Эталонная стрелка направлена вверх, то есть B→A.
+        var currentSource = Part("J", ElementType.CurrentSource, 5, 10);
+        currentSource.IsPositiveAtStart = false;
+        var sourceBranch = g.AddBranch(g.Nodes[0], g.Nodes[1]);
+        sourceBranch.AddElement(currentSource, -1);
+
+        var result = Solve(g, mesh, settings);
+
+        static void EtalonNear(Complex expected, Complex actual, double tolerance = 0.0015) =>
+            Assert.True((expected - actual).Magnitude <= tolerance,
+                $"Etalon expected {expected}; actual {actual}; error {(expected - actual).Magnitude}");
+        static void EtalonScalarNear(double expected, double actual, double tolerance = 0.0015) =>
+            Assert.True(Math.Abs(expected - actual) <= tolerance,
+                $"Etalon expected {expected}; actual {actual}; error {Math.Abs(expected - actual)}");
+
+        var branches = new[] { b1, b2, b3, b4, b5, b6, b7, b8 };
+        var expectedCurrents = new[]
+        {
+            new Complex(-0.134533,  0.371170),
+            new Complex(-0.078409,  0.223216),
+            new Complex(-0.228842, -0.149723),
+            new Complex(-0.363376,  0.221447),
+            new Complex( 0.150433,  0.372940),
+            new Complex(-0.212942,  0.594387),
+            new Complex(-4.711096, -1.462628),
+            new Complex(-0.078409,  0.223216)
+        };
+        var expectedPassiveVoltages = new[]
+            { 19.739972, 52.198143, 21.330673, 39.447252, 41.638622, 69.512657, 123.323021, 31.565020 };
+        var expectedPassivePowers = new[]
+        {
+            new Complex(  7.793330,   0.000000),
+            new Complex(  3.358417, -11.883995),
+            new Complex(  5.833303,   0.000000),
+            new Complex( 13.762124,  -9.611495),
+            new Complex(  4.042854,  16.249039),
+            new Complex( 17.938808,  40.055366),
+            new Complex(608.342701,   0.000000),
+            new Complex(  2.518813,   7.030286)
+        };
+
+        for (int i = 0; i < branches.Length; i++)
+        {
+            var row = Row(result, branches[i]);
+            EtalonNear(expectedCurrents[i], row.CurrentPhasor);
+            EtalonScalarNear(expectedPassiveVoltages[i], row.PassiveVoltagePhasor.Magnitude);
+            EtalonNear(expectedPassivePowers[i], row.PassiveComplexPower);
+        }
+
+        EtalonNear(Polar(5, 10), Row(result, sourceBranch).CurrentPhasor, 1e-9);
+        EtalonScalarNear(51.902001, Row(result, b6).SourceComplexPowerGenerated.Real);
+        EtalonScalarNear(611.688348, Row(result, sourceBranch).SourceComplexPowerGenerated.Real);
+        EtalonNear(new Complex(663.590349, 41.839201), result.TotalComplexPowerConsumed);
+        EtalonNear(result.TotalComplexPowerConsumed, result.TotalComplexPowerGenerated, 1e-9);
+
+        // U6 эталона — напряжение на R6+L6, а не полное напряжение ветви с E6.
+        EtalonScalarNear(69.512657, Row(result, b6).PassiveVoltagePhasor.Magnitude);
+        EtalonScalarNear(131.855410, Row(result, b6).VoltagePhasor.Magnitude);
+    }
+
+    [Theory]
     [InlineData(false)] [InlineData(true)]
     public void MultipleSourcesWithDifferentPhasesSuperpose(bool mesh)
     {

@@ -44,6 +44,8 @@ namespace ElectroCalc.Core.Models
         public Complex CurrentPhasor { get; set; } = Complex.Zero;
         /// <summary>RMS-фазор напряжения Start→End. Для DC мнимая часть равна нулю.</summary>
         public Complex VoltagePhasor { get; set; } = Complex.Zero;
+        /// <summary>RMS-фазор падения напряжения только на пассивной части ветви.</summary>
+        public Complex PassiveVoltagePhasor { get; set; } = Complex.Zero;
 
         // Совместимость с проверенным DC-кодом. Новые AC-решатели используют Phasor-поля.
         public double Current
@@ -80,6 +82,9 @@ namespace ElectroCalc.Core.Models
         public double ActivePower => CalculatedTerminalComplexPower.Real;
         public double ReactivePower => CalculatedTerminalComplexPower.Imaginary;
         public double ApparentPower => CalculatedTerminalComplexPower.Magnitude;
+        public double PassiveActivePower => PassiveComplexPower.Real;
+        public double PassiveReactivePower => PassiveComplexPower.Imaginary;
+        public double PassiveApparentPower => PassiveComplexPower.Magnitude;
     }
 
     /// <summary>
@@ -143,8 +148,11 @@ namespace ElectroCalc.Core.Models
                 sb.AppendLine("=== Результаты по ветвям ===");
                 foreach (var r in BranchResults)
                 {
-                    sb.AppendLine($"  {r.Branch}: I = {Phasor.Compact(r.CurrentPhasor, Analysis.Mode, "А")}, U = {Phasor.Compact(r.VoltagePhasor, Analysis.Mode, "В")}, " +
-                                  $"P = {r.ActivePower:F4} Вт, Q = {r.ReactivePower:F4} вар, |S| = {r.ApparentPower:F4} ВА");
+                    sb.AppendLine($"  {r.Branch}: I = {Phasor.Compact(r.CurrentPhasor, Analysis.Mode, "А")}, " +
+                                  $"Uветв = {Phasor.Compact(r.VoltagePhasor, Analysis.Mode, "В")}, " +
+                                  $"Uпасс = {Phasor.Compact(r.PassiveVoltagePhasor, Analysis.Mode, "В")}, " +
+                                  $"Pпотр = {r.PassiveActivePower:F4} Вт, Qпотр = {r.PassiveReactivePower:F4} вар, " +
+                                  $"|Sпотр| = {r.PassiveApparentPower:F4} ВА");
                 }
 
                 if (PowerBalanceAvailable)

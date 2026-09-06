@@ -308,10 +308,13 @@ namespace ElectroCalc.UI.Views
             var visitedNets = new HashSet<RawNet>();
             var essential = new HashSet<RawNet>();
 
-            // Electrical nodes are branch points/endpoints. Degree-2 series
-            // connections are intentionally NOT calculation nodes.
+            // Electrical nodes are branch points/endpoints. Ordinary degree-2
+            // connections are folded into a series branch, but an explicitly
+            // placed junction is a user-selected branch boundary and must stay
+            // in the calculation graph (for example, to separate Z2 and Z8).
+            var explicitJunctionIds = _junctions.Select(j => j.Id).ToHashSet();
             foreach (var net in usefulNets)
-                if (net.Edges.Count != 2)
+                if (net.Edges.Count != 2 || net.Members.Any(m => explicitJunctionIds.Contains(m.OwnerId)))
                     essential.Add(net);
 
             // A pure ring has degree 2 everywhere. Pick exactly two artificial
@@ -772,6 +775,12 @@ namespace ElectroCalc.UI.Views
             SelectThreePhasePhaseCombo(el.PhaseAssignment);
             ChkPolarity.Visibility   = src ? Visibility.Visible  : Visibility.Collapsed;
             ChkPolarity.IsChecked    = el.IsPositiveAtStart;
+            ChkPolarity.Content = el.Type == ElementType.CurrentSource
+                ? $"Направление тока: {(el.IsPositiveAtStart ? "A → B" : "B → A")}"
+                : $"Положительный вывод: порт {(el.IsPositiveAtStart ? "A" : "B")}";
+            ChkPolarity.ToolTip = el.Type == ElementType.CurrentSource
+                ? "Направление заданного тока относительно подписанных портов и поворачивается вместе с элементом."
+                : "Полярность ЭДС относительно подписанных портов и поворачивается вместе с элементом.";
             _suppressPropEvents = false;
         }
 
@@ -861,6 +870,9 @@ namespace ElectroCalc.UI.Views
         {
             if (_suppressPropEvents || _selectedElem == null) return;
             _selectedElem.Element.IsPositiveAtStart = ChkPolarity.IsChecked == true;
+            ChkPolarity.Content = _selectedElem.Element.Type == ElementType.CurrentSource
+                ? $"Направление тока: {(_selectedElem.Element.IsPositiveAtStart ? "A → B" : "B → A")}"
+                : $"Положительный вывод: порт {(_selectedElem.Element.IsPositiveAtStart ? "A" : "B")}";
             _selectedElem.UpdateVisual();
             InvalidateResult();
         }
@@ -1402,9 +1414,14 @@ namespace ElectroCalc.UI.Views
                 VoltageStr = result.Analysis.Mode != CircuitAnalysisMode.DC
                     ? Phasor.Polar(r.VoltagePhasor, "0.####", "0.##")
                     : $"{r.Voltage:F4}",
-                ActivePowerStr = result.PowerBalanceAvailable ? $"{r.ActivePower:F4}" : "—",
-                ReactivePowerStr = result.PowerBalanceAvailable ? $"{r.ReactivePower:F4}" : "—",
-                ApparentPowerStr = result.PowerBalanceAvailable ? $"{r.ApparentPower:F4}" : "—"
+                PassiveVoltageStr = result.PowerBalanceAvailable
+                    ? (result.Analysis.Mode != CircuitAnalysisMode.DC
+                        ? Phasor.Polar(r.PassiveVoltagePhasor, "0.####", "0.##")
+                        : $"{r.PassiveVoltagePhasor.Real:F4}")
+                    : "—",
+                ActivePowerStr = result.PowerBalanceAvailable ? $"{r.PassiveActivePower:F4}" : "—",
+                ReactivePowerStr = result.PowerBalanceAvailable ? $"{r.PassiveReactivePower:F4}" : "—",
+                ApparentPowerStr = result.PowerBalanceAvailable ? $"{r.PassiveApparentPower:F4}" : "—"
             }).ToList();
             if (!result.Success)
             {

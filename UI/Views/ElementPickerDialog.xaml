@@ -40,8 +40,9 @@
                 </StackPanel>
                 <TextBlock Text="Внутр. сопротивление (Ом):" FontSize="12" Margin="0,0,0,4"/>
                 <TextBox x:Name="TxtInternalR" FontSize="13" Padding="6,4" Text="0" Margin="0,0,0,10"/>
-                <CheckBox x:Name="ChkPolarity" Content="+ на начальном порту (A)"
-                          IsChecked="True" Margin="0,0,0,12" FontSize="12"/>
+                <CheckBox x:Name="ChkPolarity" Content="Ориентация источника относительно портов A/B"
+                          IsChecked="True" Margin="0,0,0,12" FontSize="12"
+                          Checked="ChkPolarity_Changed" Unchecked="ChkPolarity_Changed"/>
             </StackPanel>
         </StackPanel>
 

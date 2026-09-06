@@ -162,6 +162,7 @@ namespace ElectroCalc.Core.Solvers
                         Branch = branch,
                         Current = branchCurrent[branch],
                         Voltage = branchVoltage[branch],
+                        PassiveVoltagePhasor = branchCurrent[branch] * models[branch].Resistance,
                         PowerConsumed = power.consumed,
                         PowerGenerated = power.generated
                     });

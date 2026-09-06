@@ -34,7 +34,10 @@ namespace ElectroCalc.Core.Models
         public double InternalResistance { get; set; } = 0.0;
 
         /// <summary>
-        /// Polarity for E/J: true = positive terminal at StartNode.
+        /// Ориентация относительно собственных портов элемента. Для E:
+        /// true = положительный вывод A, false = положительный вывод B.
+        /// Для J: true = ток A→B, false = ток B→A.
+        /// Имя свойства оставлено для совместимости с файлами схем прежних версий.
         /// </summary>
         public bool IsPositiveAtStart { get; set; } = true;
 

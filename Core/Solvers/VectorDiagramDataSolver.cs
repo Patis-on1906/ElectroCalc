@@ -204,6 +204,7 @@ namespace ElectroCalc.Core.Solvers
             Branch = r.Branch,
             CurrentPhasor = r.CurrentPhasor,
             VoltagePhasor = r.VoltagePhasor,
+            PassiveVoltagePhasor = r.PassiveVoltagePhasor,
             PassiveComplexPower = r.PassiveComplexPower,
             SourceComplexPowerGenerated = r.SourceComplexPowerGenerated,
             TerminalComplexPower = r.TerminalComplexPower

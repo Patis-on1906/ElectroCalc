@@ -296,6 +296,7 @@ namespace ElectroCalc.Core.Solvers
                 Branch = b,
                 CurrentPhasor = i,
                 VoltagePhasor = u,
+                PassiveVoltagePhasor = u,
                 PassiveComplexPower = s,
                 TerminalComplexPower = s
             };

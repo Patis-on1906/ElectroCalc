@@ -61,6 +61,13 @@ public class RotationTests
         Assert.Equal(4, moved);
         Assert.Equal(0, control.RotationDegrees);
         Assert.Equal(a, control.PortA); Assert.Equal(b, control.PortB);
+        if (type == ElementType.CurrentSource)
+        {
+            Assert.Contains("B→A", Field<TextBlock>(control, "_topLabel").Text);
+            element.IsPositiveAtStart = true;
+            control.UpdateVisual();
+            Assert.Contains("A→B", Field<TextBlock>(control, "_topLabel").Text);
+        }
         // Dragging a rotated element translates both ports equally.
         control.RotateClockwise();
         a = control.PortA; b = control.PortB;
@@ -136,6 +143,33 @@ public class RotationTests
             saved.Elements[0].RotationDegrees = 45;
             var exception = Assert.Throws<TargetInvocationException>(() => Invoke(window, "LoadProjectFile", saved));
             Assert.IsType<InvalidDataException>(exception.InnerException);
+
+            // An explicitly placed degree-2 junction is a deliberate branch
+            // boundary and must not be folded away by graph reconstruction.
+            var eId = Guid.NewGuid(); var r1Id = Guid.NewGuid(); var r2Id = Guid.NewGuid();
+            var junctionId = Guid.NewGuid();
+            var explicitNodeProject = new CircuitProjectFile
+            {
+                Elements = new()
+                {
+                    new() { Id = eId, Type = ElementType.VoltageSource, Name = "E1", Value = 10, IsPositiveAtStart = true, CenterX = 300, CenterY = 100 },
+                    new() { Id = r1Id, Type = ElementType.Resistor, Name = "R1", Value = 2, CenterX = 200, CenterY = 300 },
+                    new() { Id = r2Id, Type = ElementType.Resistor, Name = "R2", Value = 3, CenterX = 400, CenterY = 300 }
+                },
+                Junctions = new() { new() { Id = junctionId, X = 300, Y = 300 } },
+                Wires = new()
+                {
+                    Wire(ElementEndpoint(eId, true), ElementEndpoint(r1Id, true)),
+                    Wire(ElementEndpoint(r1Id, false), JunctionEndpoint(junctionId)),
+                    Wire(JunctionEndpoint(junctionId), ElementEndpoint(r2Id, true)),
+                    Wire(ElementEndpoint(r2Id, false), ElementEndpoint(eId, false))
+                }
+            };
+            Invoke(window, "LoadProjectFile", explicitNodeProject);
+            var explicitGraph = Field<CircuitGraph>(window, "_graph");
+            Assert.Equal(3, explicitGraph.Nodes.Count);
+            Assert.Equal(3, explicitGraph.Branches.Count);
+            Assert.All(explicitGraph.Branches, branch => Assert.Single(branch.Elements));
         }
         finally { window.Close(); app.Shutdown(); }
     });
@@ -160,6 +194,11 @@ public class RotationTests
         From = new() { OwnerId = from, IsElement = true, IsPortA = portA },
         To = new() { OwnerId = to, IsElement = true, IsPortA = portA }
     };
+    private static SavedWire Wire(SavedEndpoint from, SavedEndpoint to) => new() { From = from, To = to };
+    private static SavedEndpoint ElementEndpoint(Guid id, bool portA) =>
+        new() { OwnerId = id, IsElement = true, IsPortA = portA };
+    private static SavedEndpoint JunctionEndpoint(Guid id) =>
+        new() { OwnerId = id, IsElement = false, IsPortA = false };
     private static object? Invoke(object target, string name, params object[] args) =>
         target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
     private static T Field<T>(object target, string name) =>

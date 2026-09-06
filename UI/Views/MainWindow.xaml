@@ -257,7 +257,7 @@
                             </StackPanel>
 
                             <CheckBox x:Name="ChkPolarity"
-                                      Content="+ на порту A"
+                                      Content="Ориентация источника относительно портов A/B"
                                       Margin="0,8,0,0" FontSize="11"
                                       Visibility="Collapsed"
                                       Checked="ChkPolarity_Changed"
@@ -392,13 +392,14 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Ветвь"  Binding="{Binding BranchName}" Width="80"/>
                                 <DataGridTextColumn Header="I, А"   Binding="{Binding CurrentStr}"  Width="90"/>
-                                <DataGridTextColumn Header="U, В"   Binding="{Binding VoltageStr}"  Width="90"/>
-                                <DataGridTextColumn Header="P, Вт" Binding="{Binding ActivePowerStr}" Width="75"/>
-                                <DataGridTextColumn Header="Q, вар" Binding="{Binding ReactivePowerStr}" Width="75"/>
-                                <DataGridTextColumn Header="|S|, ВА" Binding="{Binding ApparentPowerStr}" Width="75"/>
+                                <DataGridTextColumn Header="Uветв, В" Binding="{Binding VoltageStr}" Width="90"/>
+                                <DataGridTextColumn Header="Uпасс, В" Binding="{Binding PassiveVoltageStr}" Width="90"/>
+                                <DataGridTextColumn Header="Pпотр, Вт" Binding="{Binding ActivePowerStr}" Width="75"/>
+                                <DataGridTextColumn Header="Qпотр, вар" Binding="{Binding ReactivePowerStr}" Width="75"/>
+                                <DataGridTextColumn Header="|Sпотр|, ВА" Binding="{Binding ApparentPowerStr}" Width="80"/>
                             </DataGrid.Columns>
                         </DataGrid>
-                        <TextBlock Text="P,Q — знаковые мощности ветви по S=U·I*: + потребление; Q&gt;0 индуктивный характер, Q&lt;0 ёмкостный."
+                        <TextBlock Text="Uветв — между узлами; Uпасс и Pпотр/Qпотр — только для R/L/C и внутренних сопротивлений. Q&gt;0 — индуктивный, Q&lt;0 — ёмкостный характер."
                                    FontSize="9" TextWrapping="Wrap" Margin="0,4,0,0"
                                    Foreground="{StaticResource TextSecondaryBrush}"/>
 

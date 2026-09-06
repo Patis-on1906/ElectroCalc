@@ -122,6 +122,7 @@ namespace ElectroCalc.Core.Solvers
                         Branch = r.Branch,
                         Current = r.Current,
                         Voltage = r.Voltage,
+                        PassiveVoltagePhasor = r.PassiveVoltagePhasor,
                         PowerConsumed = r.PowerConsumed,
                         PowerGenerated = r.PowerGenerated
                     });

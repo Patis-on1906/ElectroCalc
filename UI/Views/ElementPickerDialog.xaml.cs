@@ -42,6 +42,15 @@ namespace ElectroCalc.UI.Views
             if (PanelSource     != null) PanelSource.Visibility      = isSource   ? Visibility.Visible  : Visibility.Collapsed;
             if (PanelPhase      != null) PanelPhase.Visibility       = isSource && _analysisMode != CircuitAnalysisMode.DC ? Visibility.Visible : Visibility.Collapsed;
             if (TxtValueLabel   != null) TxtValueLabel.Text          = isSource && _analysisMode != CircuitAnalysisMode.DC ? "Действующее значение (RMS):" : "Значение:";
+            if (ChkPolarity != null)
+            {
+                ChkPolarity.Content = tag == "CurrentSource"
+                    ? $"Направление тока: {(ChkPolarity.IsChecked == true ? "A → B" : "B → A")}"
+                    : $"Положительный вывод: порт {(ChkPolarity.IsChecked == true ? "A" : "B")}";
+                ChkPolarity.ToolTip = tag == "CurrentSource"
+                    ? "Направление тока задаётся относительно портов и поворачивается вместе с элементом."
+                    : "Полярность ЭДС задаётся относительно портов и поворачивается вместе с элементом.";
+            }
 
             if (TxtUnit != null)
                 TxtUnit.Text = tag switch
@@ -65,6 +74,15 @@ namespace ElectroCalc.UI.Views
                     "Inductor"      => "L1",
                     _ => ""
                 };
+        }
+
+        private void ChkPolarity_Changed(object s, RoutedEventArgs e)
+        {
+            if (CmbType?.SelectedItem is not ComboBoxItem item || ChkPolarity == null) return;
+            string? tag = item.Tag?.ToString();
+            ChkPolarity.Content = tag == "CurrentSource"
+                ? $"Направление тока: {(ChkPolarity.IsChecked == true ? "A → B" : "B → A")}"
+                : $"Положительный вывод: порт {(ChkPolarity.IsChecked == true ? "A" : "B")}";
         }
 
         private void BtnAdd_Click(object s, RoutedEventArgs e)

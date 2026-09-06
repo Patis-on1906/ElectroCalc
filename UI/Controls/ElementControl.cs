@@ -79,6 +79,8 @@ namespace ElectroCalc.UI.Controls
         private readonly TextBlock _botLabel;
         private readonly Ellipse   _portA;
         private readonly Ellipse   _portB;
+        private readonly TextBlock _portALabel;
+        private readonly TextBlock _portBLabel;
 
         private const double PORT_R    = 6;
         private const double ELEM_W    = 80;
@@ -99,7 +101,7 @@ namespace ElectroCalc.UI.Controls
             Cursor  = Cursors.SizeAll;
             Focusable = true;
             RenderTransformOrigin = new Point(0.5, 0.5);
-            ToolTip = "Выберите элемент и нажмите R — поворот на 90° по часовой стрелке";
+            ToolTip = "Порты: A слева, B справа. Выберите элемент и нажмите R — поворот на 90° по часовой стрелке";
 
             // Body rectangle
             _body = new Border
@@ -153,6 +155,17 @@ namespace ElectroCalc.UI.Controls
             _portA.ToolTip = "Порт A";
             _portB.ToolTip = "Порт B";
 
+            // Port identities remain visible after rotation so source
+            // orientation A→B/B→A can be read directly from the schematic.
+            _portALabel = MakePortLabel("A");
+            SetLeft(_portALabel, -PORT_R);
+            SetTop(_portALabel, ELEM_H / 2 - PORT_R);
+            Children.Add(_portALabel);
+            _portBLabel = MakePortLabel("B");
+            SetLeft(_portBLabel, ELEM_W + PORT_R);
+            SetTop(_portBLabel, ELEM_H / 2 - PORT_R);
+            Children.Add(_portBLabel);
+
             // Drag events on body
             _body.MouseLeftButtonDown += Body_MouseDown;
             _body.MouseMove           += Body_MouseMove;
@@ -170,6 +183,18 @@ namespace ElectroCalc.UI.Controls
             Stroke = new SolidColorBrush(Color.FromRgb(21, 101, 192)),
             StrokeThickness = 2,
             Cursor = Cursors.Cross
+        };
+
+        private static TextBlock MakePortLabel(string text) => new()
+        {
+            Width = PORT_R * 2,
+            Height = PORT_R * 2,
+            Text = text,
+            FontSize = 7,
+            FontWeight = FontWeights.Bold,
+            Foreground = new SolidColorBrush(Color.FromRgb(21, 101, 192)),
+            TextAlignment = TextAlignment.Center,
+            IsHitTestVisible = false
         };
 
         // ── Drag ─────────────────────────────────────────────────────────────
@@ -243,8 +268,21 @@ namespace ElectroCalc.UI.Controls
 
             string phasePrefix = DisplayAnalysisMode == CircuitAnalysisMode.ThreePhase && Element.PhaseAssignment != ThreePhasePhase.None
                 ? $"[{Element.PhaseAssignment}] " : string.Empty;
-            _topLabel.Text = $"{phasePrefix}{symbol} {Element.Name}";
+            string orientation = Element.Type switch
+            {
+                ElementType.CurrentSource => Element.IsPositiveAtStart ? " A→B" : " B→A",
+                ElementType.VoltageSource => Element.IsPositiveAtStart ? " +A" : " +B",
+                _ => string.Empty
+            };
+            _topLabel.Text = $"{phasePrefix}{symbol} {Element.Name}{orientation}";
             _botLabel.Text = FormatValue(Element);
+
+            ToolTip = Element.Type switch
+            {
+                ElementType.CurrentSource => $"Источник тока: {(Element.IsPositiveAtStart ? "A → B" : "B → A")}. R — поворот на 90°.",
+                ElementType.VoltageSource => $"Источник ЭДС: положительный вывод {(Element.IsPositiveAtStart ? "A" : "B")}. R — поворот на 90°.",
+                _ => "Порты: A и B. R — поворот на 90° по часовой стрелке."
+            };
 
             // Show current after solve
             if (Element.LastCurrentPhasor.Magnitude > 1e-12)

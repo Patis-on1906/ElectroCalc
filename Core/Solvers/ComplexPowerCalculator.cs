@@ -33,10 +33,12 @@ namespace ElectroCalc.Core.Solvers
             {
                 var model = models[row.Branch];
                 Complex terminal = row.VoltagePhasor * Complex.Conjugate(row.CurrentPhasor);
+                Complex passiveVoltage = row.CurrentPhasor * model.Impedance;
                 Complex passive = row.CurrentPhasor.Magnitude * row.CurrentPhasor.Magnitude * model.Impedance;
                 Complex generated = passive - terminal;
 
                 row.TerminalComplexPower = Clean(terminal);
+                row.PassiveVoltagePhasor = Clean(passiveVoltage);
                 row.PassiveComplexPower = Clean(passive);
                 row.SourceComplexPowerGenerated = Clean(generated);
             }

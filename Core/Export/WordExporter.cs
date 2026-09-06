@@ -142,21 +142,23 @@ namespace ElectroCalc.Core.Export
 
             if (result.Analysis.Mode != CircuitAnalysisMode.DC)
             {
-                table.AppendChild(TableRow(true, "Ветвь", "I (RMS-фазор), А", "U (RMS-фазор), В", "P, Вт", "Q, вар", "|S|, ВА"));
+                table.AppendChild(TableRow(true, "Ветвь", "I (RMS-фазор), А", "Uветв (RMS-фазор), В", "Uпасс (RMS-фазор), В", "Pпотр, Вт", "Qпотр, вар", "|Sпотр|, ВА"));
                 foreach (var r in result.BranchResults)
                     table.AppendChild(TableRow(false,
                         r.Branch.ToString(),
                         $"{Phasor.Rectangular(r.CurrentPhasor)} = {Phasor.Exponential(r.CurrentPhasor)}",
                         $"{Phasor.Rectangular(r.VoltagePhasor)} = {Phasor.Exponential(r.VoltagePhasor)}",
-                        $"{r.ActivePower:F4}", $"{r.ReactivePower:F4}", $"{r.ApparentPower:F4}"));
+                        $"{Phasor.Rectangular(r.PassiveVoltagePhasor)} = {Phasor.Exponential(r.PassiveVoltagePhasor)}",
+                        $"{r.PassiveActivePower:F4}", $"{r.PassiveReactivePower:F4}", $"{r.PassiveApparentPower:F4}"));
             }
             else
             {
-                table.AppendChild(TableRow(true, "Ветвь", "I, А", "U, В", "P, Вт", "Q, вар", "|S|, ВА"));
+                table.AppendChild(TableRow(true, "Ветвь", "I, А", "Uветв, В", "Uпасс, В", "Pпотр, Вт", "Qпотр, вар", "|Sпотр|, ВА"));
                 foreach (var r in result.BranchResults)
                     table.AppendChild(TableRow(false,
                         r.Branch.ToString(), $"{r.Current:F4}", $"{r.Voltage:F4}",
-                        $"{r.ActivePower:F4}", $"{r.ReactivePower:F4}", $"{r.ApparentPower:F4}"));
+                        $"{r.PassiveVoltagePhasor.Real:F4}",
+                        $"{r.PassiveActivePower:F4}", $"{r.PassiveReactivePower:F4}", $"{r.PassiveApparentPower:F4}"));
             }
             return table;
         }
