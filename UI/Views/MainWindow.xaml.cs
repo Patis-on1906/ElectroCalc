@@ -83,6 +83,7 @@ namespace ElectroCalc.UI.Views
             SchematicCanvas.MouseMove            += Canvas_MouseMove;
             SchematicCanvas.MouseLeftButtonUp    += Canvas_MouseUp;
             SchematicCanvas.MouseRightButtonDown += Canvas_RightClick;
+            KeyDown += Window_KeyDown;
             SetStatus("2×клик на холсте — добавить элемент/точку. Тяни от ● порта — провод.");
         }
 
@@ -448,7 +449,8 @@ namespace ElectroCalc.UI.Views
 
         // ── Place element ──────────────────────────────────────────────────────
         private ElementControl PlaceElement(ElementType type, string name, double value,
-                                            bool polarity, double internalR, Point pt, double phaseDegrees = 0.0)
+                                            bool polarity, double internalR, Point pt, double phaseDegrees = 0.0,
+                                            int rotationDegrees = 0)
         {
             var circ = new CircuitElement
             {
@@ -458,6 +460,7 @@ namespace ElectroCalc.UI.Views
             var ctrl = new ElementControl(circ) { DisplayAnalysisMode = _analysisSettings.Mode };
             Canvas.SetLeft(ctrl, pt.X - ctrl.Width / 2);
             Canvas.SetTop (ctrl, pt.Y - ctrl.Height / 2);
+            ctrl.RotationDegrees = rotationDegrees;
             ctrl.PortDragStarted += OnPortDragStarted;
             ctrl.Moved           += OnElementMoved;
             ctrl.Selected        += OnElementSelected;
@@ -683,6 +686,28 @@ namespace ElectroCalc.UI.Views
         }
 
         // ── Element events ─────────────────────────────────────────────────────
+        private void BtnRotateElement_Click(object sender, RoutedEventArgs e) => RotateSelectedElement();
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            // Only the focused schematic element handles R; typing in properties is unaffected.
+            if (e.Key == Key.R && Keyboard.Modifiers == ModifierKeys.None && !e.IsRepeat &&
+                e.OriginalSource is ElementControl && _selectedElem != null &&
+                !_wiringMode && Mouse.LeftButton == MouseButtonState.Released)
+            {
+                RotateSelectedElement();
+                e.Handled = true;
+            }
+        }
+
+        private void RotateSelectedElement()
+        {
+            if (_selectedElem == null || _wiringMode) return;
+            _selectedElem.RotateClockwise();
+            _selectedElem.Focus();
+            SetStatus($"{_selectedElem.Element.Name}: поворот {_selectedElem.RotationDegrees}°. R — ещё на 90°.");
+        }
+
         private void OnElementMoved(ElementControl ctrl)
         {
             foreach (var w in _wires.Where(w =>
@@ -987,7 +1012,8 @@ namespace ElectroCalc.UI.Views
                     PhaseDegrees = ctrl.Element.PhaseDegrees,
                     ThreePhasePhase = ctrl.Element.PhaseAssignment,
                     CenterX = ctrl.Centre.X,
-                    CenterY = ctrl.Centre.Y
+                    CenterY = ctrl.Centre.Y,
+                    RotationDegrees = ctrl.RotationDegrees
                 });
             }
 
@@ -1089,7 +1115,7 @@ namespace ElectroCalc.UI.Views
             {
                 var ctrl = PlaceElement(saved.Type, saved.Name, saved.Value,
                     saved.IsPositiveAtStart, saved.InternalResistance,
-                    new Point(saved.CenterX, saved.CenterY), saved.PhaseDegrees);
+                    new Point(saved.CenterX, saved.CenterY), saved.PhaseDegrees, saved.RotationDegrees);
                 ctrl.Element.PhaseAssignment = saved.ThreePhasePhase;
                 ctrl.UpdateVisual();
                 elementMap.Add(saved.Id, ctrl);
@@ -1190,6 +1216,8 @@ namespace ElectroCalc.UI.Views
                     throw new InvalidDataException($"Некорректные числовые данные элемента '{e.Name}'.");
                 if (e.InternalResistance < 0)
                     throw new InvalidDataException($"Внутреннее сопротивление '{e.Name}' не может быть отрицательным.");
+                if (e.RotationDegrees is not (0 or 90 or 180 or 270))
+                    throw new InvalidDataException($"Некорректный угол поворота элемента '{e.Name}'.");
                 if ((e.Type is ElementType.Resistor or ElementType.Capacitor or ElementType.Inductor) && e.Value < 0)
                     throw new InvalidDataException($"Значение пассивного элемента '{e.Name}' не может быть отрицательным.");
                 if (project.Analysis.Mode != CircuitAnalysisMode.DC &&
