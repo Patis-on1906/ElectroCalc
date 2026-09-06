@@ -1,0 +1,57 @@
+<Window x:Class="ElectroCalc.UI.Views.ElementPickerDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Добавить на схему"
+        Width="320" Height="440"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundBrush}">
+
+    <StackPanel Margin="20">
+        <TextBlock Text="Тип элемента:" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+        <ComboBox x:Name="CmbType" FontSize="13" Padding="6,4" Margin="0,0,0,14"
+                  SelectionChanged="CmbType_SelectionChanged">
+            <ComboBoxItem Content="R  Резистор"           Tag="Resistor"       IsSelected="True"/>
+            <ComboBoxItem Content="E  Источник ЭДС"       Tag="VoltageSource"/>
+            <ComboBoxItem Content="J  Источник тока"      Tag="CurrentSource"/>
+            <ComboBoxItem Content="C  Конденсатор"        Tag="Capacitor"/>
+            <ComboBoxItem Content="L  Индуктивность"      Tag="Inductor"/>
+            <ComboBoxItem Content="·  Точка соединения"   Tag="Junction"/>
+        </ComboBox>
+
+        <!-- Element fields (hidden for Junction) -->
+        <StackPanel x:Name="PanelFields">
+            <TextBlock Text="Имя:" FontSize="12" Margin="0,0,0,4"/>
+            <TextBox x:Name="TxtName" FontSize="13" Padding="6,4" Margin="0,0,0,12" Text="R1"/>
+
+            <TextBlock x:Name="TxtValueLabel" Text="Значение:" FontSize="12" Margin="0,0,0,4"/>
+            <DockPanel Margin="0,0,0,12">
+                <TextBlock x:Name="TxtUnit" Text="Ом" DockPanel.Dock="Right"
+                           FontSize="12" VerticalAlignment="Center" Margin="6,0,0,0"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox x:Name="TxtValue" FontSize="13" Padding="6,4" Text="100"/>
+            </DockPanel>
+
+            <StackPanel x:Name="PanelSource" Visibility="Collapsed">
+                <StackPanel x:Name="PanelPhase" Visibility="Collapsed">
+                    <TextBlock Text="Фаза источника (°):" FontSize="12" Margin="0,0,0,4"/>
+                    <TextBox x:Name="TxtPhase" FontSize="13" Padding="6,4" Text="0" Margin="0,0,0,10"/>
+                </StackPanel>
+                <TextBlock Text="Внутр. сопротивление (Ом):" FontSize="12" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtInternalR" FontSize="13" Padding="6,4" Text="0" Margin="0,0,0,10"/>
+                <CheckBox x:Name="ChkPolarity" Content="+ на начальном порту (A)"
+                          IsChecked="True" Margin="0,0,0,12" FontSize="12"/>
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock x:Name="TxtJunctionHint"
+                   Text="Будет добавлена точка соединения проводов."
+                   Visibility="Collapsed"
+                   FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"
+                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+        <Button Content="Добавить" Style="{StaticResource PrimaryButton}"
+                Click="BtnAdd_Click" Margin="0,6,0,0"/>
+    </StackPanel>
+</Window>
