@@ -29,10 +29,34 @@ namespace ElectroCalc.UI.Controls
                        Canvas.GetTop(this)  + Height / 2);
         }
 
-        /// <summary>Absolute canvas position of port A (left/top).</summary>
-        public Point PortA => new(Canvas.GetLeft(this),          Canvas.GetTop(this) + Height / 2);
-        /// <summary>Absolute canvas position of port B (right/bottom).</summary>
-        public Point PortB => new(Canvas.GetLeft(this) + Width,  Canvas.GetTop(this) + Height / 2);
+        private int _rotationDegrees;
+        /// <summary>Clockwise rotation about Centre; port identities and polarity stay unchanged.</summary>
+        public int RotationDegrees
+        {
+            get => _rotationDegrees;
+            set
+            {
+                if (value is not (0 or 90 or 180 or 270))
+                    throw new ArgumentOutOfRangeException(nameof(value), "Угол должен быть 0, 90, 180 или 270°.");
+                if (_rotationDegrees == value) return;
+                _rotationDegrees = value;
+                RenderTransform = new RotateTransform(value);
+                Moved?.Invoke(this);
+            }
+        }
+
+        public void RotateClockwise() => RotationDegrees = (RotationDegrees + 90) % 360;
+
+        private Vector PortOffset => RotationDegrees switch
+        {
+            90 => new Vector(0, Width / 2),
+            180 => new Vector(-Width / 2, 0),
+            270 => new Vector(0, -Width / 2),
+            _ => new Vector(Width / 2, 0)
+        };
+
+        public Point PortA => Centre - PortOffset;
+        public Point PortB => Centre + PortOffset;
 
         private bool _isSelected;
         public bool IsSelected
@@ -73,6 +97,9 @@ namespace ElectroCalc.UI.Controls
             Width   = ELEM_W + PORT_R * 2;
             Height  = ELEM_H;
             Cursor  = Cursors.SizeAll;
+            Focusable = true;
+            RenderTransformOrigin = new Point(0.5, 0.5);
+            ToolTip = "Выберите элемент и нажмите R — поворот на 90° по часовой стрелке";
 
             // Body rectangle
             _body = new Border
@@ -108,7 +135,7 @@ namespace ElectroCalc.UI.Controls
 
             // Port A (left)
             _portA = MakePort();
-            SetLeft(_portA, 0);
+            SetLeft(_portA, -PORT_R);
             SetTop (_portA, ELEM_H / 2 - PORT_R);
             Children.Add(_portA);
 
@@ -123,6 +150,8 @@ namespace ElectroCalc.UI.Controls
             _portB.MouseLeftButtonDown += (s, e) => { e.Handled = true; PortDragStarted?.Invoke(this, false); };
             _portA.Cursor = Cursors.Cross;
             _portB.Cursor = Cursors.Cross;
+            _portA.ToolTip = "Порт A";
+            _portB.ToolTip = "Порт B";
 
             // Drag events on body
             _body.MouseLeftButtonDown += Body_MouseDown;
@@ -146,6 +175,8 @@ namespace ElectroCalc.UI.Controls
         // ── Drag ─────────────────────────────────────────────────────────────
         private void Body_MouseDown(object s, MouseButtonEventArgs e)
         {
+            // Do not bubble double clicks to the canvas's element picker.
+            e.Handled = true;
             if (e.ClickCount == 1)
             {
                 _dragging     = true;
@@ -183,7 +214,11 @@ namespace ElectroCalc.UI.Controls
             {
                 _body.ReleaseMouseCapture();
                 _dragging = false;
-                if (!_dragMoved) Selected?.Invoke(this);
+                if (!_dragMoved)
+                {
+                    Selected?.Invoke(this);
+                    Focus();
+                }
                 e.Handled = true;
             }
         }

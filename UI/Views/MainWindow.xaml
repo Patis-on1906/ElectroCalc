@@ -211,6 +211,10 @@
                                    TextWrapping="Wrap"/>
 
                         <StackPanel x:Name="PropPanel" Visibility="Collapsed">
+                            <Button Content="↻ Повернуть на 90°"
+                                    ToolTip="По часовой стрелке. На схеме: клавиша R"
+                                    Margin="0,6,0,0" Padding="4,3"
+                                    Click="BtnRotateElement_Click"/>
                             <TextBlock Text="Имя:" FontSize="11" Margin="0,6,0,2"/>
                             <TextBox x:Name="TxtPropName" FontSize="12" Padding="4,3"
                                      BorderBrush="{StaticResource BorderBrush}"
@@ -253,7 +257,7 @@
                             </StackPanel>
 
                             <CheckBox x:Name="ChkPolarity"
-                                      Content="+ на порту A (левый)"
+                                      Content="+ на порту A"
                                       Margin="0,8,0,0" FontSize="11"
                                       Visibility="Collapsed"
                                       Checked="ChkPolarity_Changed"

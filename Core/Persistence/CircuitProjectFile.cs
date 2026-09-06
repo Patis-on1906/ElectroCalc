@@ -15,7 +15,7 @@ namespace ElectroCalc.Core.Persistence
     /// </summary>
     public sealed class CircuitProjectFile
     {
-        public const int CurrentFormatVersion = 3;
+        public const int CurrentFormatVersion = 4;
         public string Format { get; set; } = "ElectroCalcCircuit";
         public int Version { get; set; } = CurrentFormatVersion;
         public DateTime SavedUtc { get; set; } = DateTime.UtcNow;
@@ -41,6 +41,8 @@ namespace ElectroCalc.Core.Persistence
         public ThreePhasePhase ThreePhasePhase { get; set; } = ThreePhasePhase.None;
         public double CenterX { get; set; }
         public double CenterY { get; set; }
+        /// <summary>Clockwise angle; files before v4 default to zero.</summary>
+        public int RotationDegrees { get; set; }
     }
 
 
