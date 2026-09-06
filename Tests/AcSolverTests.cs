@@ -33,7 +33,7 @@ public class AcSolverTests
             $"Expected {expected}; actual {actual}; error {(expected - actual).Magnitude}");
     }
     private static BranchResult Row(CalculationResult result, CircuitBranch branch) =>
-        Assert.Single(result.BranchResults.Where(r => r.Branch == branch));
+        Assert.Single(result.BranchResults, r => r.Branch == branch);
     private static CalculationResult Solve(CircuitGraph g, bool mesh, CircuitAnalysisSettings? settings = null)
     {
         var result = mesh ? new MeshCurrentSolver(g, settings ?? Ac()).Solve() : new NodePotentialSolver(g, settings ?? Ac()).Solve();
@@ -210,6 +210,24 @@ public class AcSolverTests
         Near(u / z1, Row(result, l1).CurrentPhasor);
         Near(-u / z2, Row(result, l2).CurrentPhasor);
         Near(-(u / z1 + u / z2), Row(result, feed).CurrentPhasor);
+    }
+
+    [Theory]
+    [InlineData(0)] [InlineData(2)]
+    public void ParallelResonanceHasFiniteOpposingLoadCurrents(double internalR)
+    {
+        var g = Graph();
+        Branch(g, 0, 1, E(ElementType.VoltageSource, 10, 0, internalR));
+        var l = Branch(g, 0, 1, E(ElementType.Inductor, 1));
+        var c = Branch(g, 0, 1, E(ElementType.Capacitor, 1));
+        var settings = Ac(1 / (2 * Math.PI)); // omega = 1, ZL=j, ZC=-j
+        var result = new ThreeBranchSimplifiedSolver(g, settings,
+            ThreeBranchSimplifiedDetector.Detect(g, settings)!).Solve();
+        Assert.True(result.Success, result.ErrorMessage);
+        Near(new Complex(0, -10), Row(result, l).CurrentPhasor);
+        Near(new Complex(0, 10), Row(result, c).CurrentPhasor);
+        Healthy(g, result);
+        Near(Complex.Zero, result.TotalComplexPowerConsumed);
     }
 
     [Theory]
