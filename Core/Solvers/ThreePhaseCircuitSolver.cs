@@ -93,6 +93,16 @@ namespace ElectroCalc.Core.Solvers
                 throw new InvalidOperationException(
                     $"В базовом 3Φ-режиме источник тока в фазе {phase} пока не поддерживается. Используйте фазный источник ЭДС.");
 
+            var source = sources[0];
+            if (!double.IsFinite(source.Value) || source.Value < 0)
+                throw new InvalidOperationException(
+                    $"Действующее значение источника {source.Name} должно быть конечным и неотрицательным.");
+            if (!double.IsFinite(source.PhaseDegrees))
+                throw new InvalidOperationException($"Фаза источника {source.Name} должна быть конечным числом.");
+            if (!double.IsFinite(source.InternalResistance) || source.InternalResistance < 0)
+                throw new InvalidOperationException(
+                    $"Внутреннее сопротивление источника {source.Name} должно быть конечным и неотрицательным.");
+
             var load = assigned.Where(e => e.Type is ElementType.Resistor or ElementType.Inductor or ElementType.Capacitor).ToList();
             if (load.Count == 0)
                 throw new InvalidOperationException(
@@ -101,13 +111,14 @@ namespace ElectroCalc.Core.Solvers
             Complex z = Complex.Zero;
             foreach (var e in load)
             {
-                if (e.Value < 0)
-                    throw new InvalidOperationException($"Значение {e.Name} не может быть отрицательным.");
+                if (!double.IsFinite(e.Value) || e.Value < 0)
+                    throw new InvalidOperationException(
+                        $"Значение {e.Name} должно быть конечным и неотрицательным.");
                 z += e.Type switch
                 {
                     ElementType.Resistor => new Complex(e.Value, 0),
                     ElementType.Inductor => new Complex(0, _settings.AngularFrequency * e.Value),
-                    ElementType.Capacitor when e.Value > Eps => new Complex(0, -1.0 / (_settings.AngularFrequency * e.Value)),
+                    ElementType.Capacitor when e.Value > 0 => new Complex(0, -1.0 / (_settings.AngularFrequency * e.Value)),
                     ElementType.Capacitor => throw new InvalidOperationException($"Ёмкость {e.Name} должна быть больше нуля."),
                     _ => Complex.Zero
                 };
@@ -116,17 +127,17 @@ namespace ElectroCalc.Core.Solvers
             // На первом 3Φ-этапе фазные источники считаются идеальными. Линейные
             // импедансы R/L/C задаются отдельными элементами нагрузки/линии; смешивать
             // их со скрытым InternalResistance источника нельзя, особенно для Δ.
-            if (sources[0].InternalResistance > Eps)
+            if (source.InternalResistance > Eps)
                 throw new InvalidOperationException(
-                    $"В 3Φ-режиме внутреннее сопротивление источника {sources[0].Name} пока должно быть 0 Ом. " +
+                    $"В 3Φ-режиме внутреннее сопротивление источника {source.Name} пока должно быть 0 Ом. " +
                     "Сопротивления задавайте явными R/L/C элементами фазы.");
             if (z.Magnitude <= Eps)
                 throw new InvalidOperationException($"Полное сопротивление ветви {PhaseArmName(phase)} равно нулю.");
 
             // В 3Φ-режиме порт A источника считается фазным выводом, порт B — нейтральным.
-            Complex ePhasor = sources[0].SourcePhasor(_settings) * (sources[0].IsPositiveAtStart ? 1.0 : -1.0);
+            Complex ePhasor = source.SourcePhasor(_settings) * (source.IsPositiveAtStart ? 1.0 : -1.0);
 
-            return new PhaseData { Phase = phase, Source = sources[0], Loads = load, E = ePhasor, Z = z };
+            return new PhaseData { Phase = phase, Source = source, Loads = load, E = ePhasor, Z = z };
         }
 
         private CalculationResult SolveStar(CalculationResult result, Dictionary<ThreePhasePhase, PhaseData> p)
@@ -135,9 +146,19 @@ namespace ElectroCalc.Core.Solvers
             Complex za = p[ThreePhasePhase.A].Z, zb = p[ThreePhasePhase.B].Z, zc = p[ThreePhasePhase.C].Z;
             Complex ya = 1.0 / za, yb = 1.0 / zb, yc = 1.0 / zc;
 
-            Complex un = _settings.ThreePhaseHasNeutral
-                ? Complex.Zero
-                : (ea * ya + eb * yb + ec * yc) / (ya + yb + yc);
+            Complex un;
+            if (_settings.ThreePhaseHasNeutral)
+            {
+                un = Complex.Zero;
+            }
+            else
+            {
+                Complex totalAdmittance = ya + yb + yc;
+                if (totalAdmittance.Magnitude <= Eps)
+                    throw new InvalidOperationException(
+                        "Для звезды без N сумма проводимостей фаз равна нулю; напряжение нейтрали не определяется однозначно.");
+                un = (ea * ya + eb * yb + ec * yc) / totalAdmittance;
+            }
 
             Complex ua = ea - un, ub = eb - un, uc = ec - un;
             Complex ia = ua / za, ib = ub / zb, ic = uc / zc;
