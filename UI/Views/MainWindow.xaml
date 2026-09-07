@@ -384,6 +384,10 @@
                     <StackPanel>
                         <TextBlock Text="РЕЗУЛЬТАТЫ" FontSize="11" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                        <Button x:Name="BtnOpenVectorDiagrams"
+                                Content="📐 Открыть векторные диаграммы"
+                                Visibility="Collapsed" Margin="0,0,0,7" Padding="7,4"
+                                Click="BtnOpenVectorDiagrams_Click"/>
                         <DataGrid x:Name="GridResults"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   FontSize="11" RowHeight="24" MaxHeight="180"

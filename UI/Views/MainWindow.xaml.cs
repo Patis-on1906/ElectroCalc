@@ -56,6 +56,7 @@ namespace ElectroCalc.UI.Views
 
         // ── Misc ──────────────────────────────────────────────────────────────
         private CalculationResult? _lastResult;
+        private VectorDiagramWindow? _vectorDiagramWindow;
         private readonly CircuitAnalysisSettings _analysisSettings = new();
         private ThreeBranchOpportunity? _simplifiedOpportunity;
 
@@ -1370,6 +1371,9 @@ namespace ElectroCalc.UI.Views
                 foreach (var control in _elements)
                     control.UpdateVisual();
 
+                if (result.Success && result.Method == CalculationMethod.VectorData)
+                    ShowVectorDiagrams(result);
+
                 SetStatus(result.Success
                     ? (result.Method == CalculationMethod.KirchhoffLaws
                         ? $"✓ Общая система уравнений Кирхгофа составлена. Существенных узлов: {n}, ветвей: {b}."
@@ -1391,6 +1395,11 @@ namespace ElectroCalc.UI.Views
 
         private void DisplayResult(CalculationResult result)
         {
+            BtnOpenVectorDiagrams.Visibility = result.Success &&
+                                               result.Method == CalculationMethod.VectorData &&
+                                               result.VectorDiagrams.Count > 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             LstSteps.ItemsSource    = result.Steps;
             TxtStepDetail.Text      = "";
             GridResults.ItemsSource = result.BranchResults.Select(r => new
@@ -1451,6 +1460,28 @@ namespace ElectroCalc.UI.Views
         {
             if (LstSteps.SelectedItem is SolutionStep step)
                 TxtStepDetail.Text = step.MatrixText ?? step.Formula ?? "";
+        }
+
+        private void BtnOpenVectorDiagrams_Click(object sender, RoutedEventArgs e)
+        {
+            if (_lastResult is { Success: true, Method: CalculationMethod.VectorData } result &&
+                result.VectorDiagrams.Count > 0)
+                ShowVectorDiagrams(result);
+        }
+
+        private void ShowVectorDiagrams(CalculationResult result)
+        {
+            if (_vectorDiagramWindow?.IsVisible == true)
+                _vectorDiagramWindow.Close();
+
+            var window = new VectorDiagramWindow(result) { Owner = this };
+            window.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_vectorDiagramWindow, window))
+                    _vectorDiagramWindow = null;
+            };
+            _vectorDiagramWindow = window;
+            window.Show();
         }
 
         // ── Export ─────────────────────────────────────────────────────────────
@@ -1712,6 +1743,10 @@ namespace ElectroCalc.UI.Views
         {
             if (_lastResult == null) return;
             _lastResult = null;
+            if (_vectorDiagramWindow?.IsVisible == true)
+                _vectorDiagramWindow.Close();
+            _vectorDiagramWindow = null;
+            BtnOpenVectorDiagrams.Visibility = Visibility.Collapsed;
             foreach (var control in _elements)
             {
                 control.Element.LastCurrentPhasor = System.Numerics.Complex.Zero;

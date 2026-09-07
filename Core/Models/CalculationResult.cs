@@ -95,6 +95,7 @@ namespace ElectroCalc.Core.Models
 
         public List<SolutionStep>  Steps          { get; } = new();
         public List<BranchResult>  BranchResults  { get; } = new();
+        public List<PhasorDiagramData> VectorDiagrams { get; } = new();
 
         // Power balance
         public Complex TotalComplexPowerGenerated { get; set; } = Complex.Zero;

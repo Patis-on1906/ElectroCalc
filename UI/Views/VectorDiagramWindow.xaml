@@ -1,0 +1,82 @@
+<Window x:Class="ElectroCalc.UI.Views.VectorDiagramWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:oxy="http://oxyplot.org/wpf"
+        Title="ElectroCalc — Векторные диаграммы AC"
+        Width="1120" Height="780" MinWidth="820" MinHeight="600"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BackgroundBrush}">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                CornerRadius="6" Padding="10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Диаграмма:" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox x:Name="CmbDiagram" Grid.Column="1" MinWidth="320"
+                          DisplayMemberPath="Title" SelectionChanged="CmbDiagram_SelectionChanged"
+                          Padding="6,4"/>
+                <Button Grid.Column="2" Content="Сбросить масштаб" Margin="10,0,0,0"
+                        Padding="10,5" Click="BtnResetZoom_Click"/>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="480"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*" MinWidth="280"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="White" BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="4">
+                <oxy:PlotView x:Name="DiagramPlot"/>
+            </Border>
+
+            <Border Grid.Column="2" Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="6" Padding="10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="TxtDescription" Grid.Row="0" TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="TxtClosure" Grid.Row="1" TextWrapping="Wrap"
+                               FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <DataGrid x:Name="GridVectors" Grid.Row="2" AutoGenerateColumns="False"
+                              IsReadOnly="True" CanUserAddRows="False" GridLinesVisibility="Horizontal"
+                              BorderThickness="0" FontSize="11">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Вектор" Binding="{Binding Label}" Width="70"/>
+                            <DataGridTextColumn Header="a + jb" Binding="{Binding Rectangular}" Width="*"/>
+                            <DataGridTextColumn Header="Модуль" Binding="{Binding Magnitude}" Width="75"/>
+                            <DataGridTextColumn Header="Фаза" Binding="{Binding Phase}" Width="65"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <DockPanel Grid.Row="2" Margin="0,10,0,0">
+            <Button DockPanel.Dock="Right" Content="Закрыть" Padding="16,6"
+                    IsCancel="True" Click="BtnClose_Click"/>
+            <TextBlock VerticalAlignment="Center" TextWrapping="Wrap"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       Text="Колесо мыши — масштаб; правая кнопка — перемещение. Оси Re/Im имеют одинаковый масштаб, поэтому углы фазоров не искажаются."/>
+        </DockPanel>
+    </Grid>
+</Window>

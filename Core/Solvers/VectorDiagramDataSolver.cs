@@ -8,9 +8,9 @@ using ElectroCalc.Core.Models;
 namespace ElectroCalc.Core.Solvers
 {
     /// <summary>
-    /// Готовит численные данные для ручного построения векторных диаграмм.
-    /// Ничего не рисует. Выводит фазоры в алгебраической и показательной формах,
-    /// а также группирует их по ветвям, контурам и узлам.
+    /// Готовит численные и структурированные данные для векторных диаграмм.
+    /// Выводит фазоры в алгебраической и показательной формах, а также формирует
+    /// наборы векторов для автоматического построения по ветвям, контурам и узлам.
     /// </summary>
     public sealed class VectorDiagramDataSolver
     {
@@ -77,6 +77,8 @@ namespace ElectroCalc.Core.Solvers
                     MatrixText = BuildNodeVectors(result.BranchResults)
                 });
 
+                BuildDiagramData(result);
+
                 InstantaneousWaveformFormatter.AddStep(result, _settings,
                     "5. Мгновенные функции из рассчитанных фазоров");
 
@@ -107,54 +109,168 @@ namespace ElectroCalc.Core.Solvers
         private string BuildElementVoltages(IReadOnlyList<BranchResult> rows)
         {
             var sb = new StringBuilder();
-            double w = _settings.AngularFrequency;
 
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = rows[i];
-                Complex current = row.CurrentPhasor;
-                var known = new Dictionary<CircuitElement, Complex>();
-                var currentSources = row.Branch.Elements.Where(e => e.Type == ElementType.CurrentSource).ToList();
-                Complex knownSum = Complex.Zero;
+                var voltages = CalculateElementVoltages(row);
 
+                sb.AppendLine($"  Ветвь {i + 1}: {row.Branch}, I̲={Both(row.CurrentPhasor, "А")}");
                 foreach (var e in row.Branch.Elements)
                 {
-                    Complex u = e.Type switch
-                    {
-                        ElementType.Resistor => current * e.Value,
-                        ElementType.Inductor => current * Complex.ImaginaryOne * w * e.Value,
-                        ElementType.Capacitor => current / (Complex.ImaginaryOne * w * e.Value),
-                        ElementType.VoltageSource => row.Branch.GetElementDirection(e) *
-                                                     (e.IsPositiveAtStart ? 1.0 : -1.0) * e.SourcePhasor(_settings) +
-                                                     current * e.InternalResistance,
-                        ElementType.CurrentSource => current * e.InternalResistance,
-                        _ => Complex.Zero
-                    };
-                    known[e] = u;
-                    knownSum += u;
-                }
-
-                if (currentSources.Count == 1)
-                {
-                    // Остаток ветвевого напряжения относится к идеальной части единственного источника тока.
-                    var j = currentSources[0];
-                    known[j] += row.VoltagePhasor - knownSum;
-                }
-
-                sb.AppendLine($"  Ветвь {i + 1}: {row.Branch}, I̲={Both(current, "А")}");
-                foreach (var e in row.Branch.Elements)
-                {
-                    if (e.Type == ElementType.CurrentSource && currentSources.Count > 1)
+                    if (!voltages[e].HasValue)
                     {
                         sb.AppendLine($"    {e.Name}: индивидуальное напряжение не определяется однозначно (несколько идеальных источников тока в одной ветви).");
                         continue;
                     }
-                    sb.AppendLine($"    U̲_{e.Name} = {Both(known[e], "В")}");
+                    sb.AppendLine($"    U̲_{e.Name} = {Both(voltages[e]!.Value, "В")}");
                 }
-                sb.AppendLine($"    Проверка ΣU̲элем = {Both(known.Values.Aggregate(Complex.Zero, (a,b) => a+b), "В")}; U̲ветви={Both(row.VoltagePhasor, "В")}");
+                if (voltages.Values.All(value => value.HasValue))
+                {
+                    Complex sum = voltages.Values.Aggregate(Complex.Zero, (a, b) => a + b!.Value);
+                    sb.AppendLine($"    Проверка ΣU̲элем = {Both(sum, "В")}; U̲ветви={Both(row.VoltagePhasor, "В")}");
+                }
             }
 
             return sb.ToString();
+        }
+
+        private Dictionary<CircuitElement, Complex?> CalculateElementVoltages(BranchResult row)
+        {
+            Complex current = row.CurrentPhasor;
+            double w = _settings.AngularFrequency;
+            var voltages = new Dictionary<CircuitElement, Complex?>();
+            var currentSources = row.Branch.Elements.Where(e => e.Type == ElementType.CurrentSource).ToList();
+            Complex knownSum = Complex.Zero;
+
+            foreach (var e in row.Branch.Elements)
+            {
+                Complex u = e.Type switch
+                {
+                    ElementType.Resistor => current * e.Value,
+                    ElementType.Inductor => current * Complex.ImaginaryOne * w * e.Value,
+                    ElementType.Capacitor => current / (Complex.ImaginaryOne * w * e.Value),
+                    ElementType.VoltageSource => row.Branch.GetElementDirection(e) *
+                                                 (e.IsPositiveAtStart ? 1.0 : -1.0) * e.SourcePhasor(_settings) +
+                                                 current * e.InternalResistance,
+                    ElementType.CurrentSource => current * e.InternalResistance,
+                    _ => Complex.Zero
+                };
+                voltages[e] = u;
+                knownSum += u;
+            }
+
+            if (currentSources.Count == 1)
+            {
+                // Остаток ветвевого напряжения относится к идеальной части
+                // единственного источника тока.
+                var source = currentSources[0];
+                voltages[source] = voltages[source]!.Value + row.VoltagePhasor - knownSum;
+            }
+            else if (currentSources.Count > 1)
+            {
+                // Суммарное напряжение нескольких последовательных идеальных J
+                // известно, но распределение между ними не единственно.
+                foreach (var source in currentSources)
+                    voltages[source] = null;
+            }
+
+            return voltages;
+        }
+
+        private void BuildDiagramData(CalculationResult result)
+        {
+            var rows = result.BranchResults;
+            var branchNumbers = rows.Select((row, index) => (row.Branch, Number: index + 1))
+                .ToDictionary(item => item.Branch, item => item.Number);
+
+            var currents = new PhasorDiagramData
+            {
+                Title = "Токи ветвей",
+                Description = "Все токи показаны из начала координат в положительных направлениях расчётных ветвей.",
+                Unit = "А"
+            };
+            var voltages = new PhasorDiagramData
+            {
+                Title = "Напряжения ветвей",
+                Description = "Все напряжения U=φstart−φend показаны из начала координат.",
+                Unit = "В"
+            };
+            for (int i = 0; i < rows.Count; i++)
+            {
+                currents.Vectors.Add(new PhasorDiagramVector { Label = $"I{i + 1}", Value = rows[i].CurrentPhasor });
+                voltages.Vectors.Add(new PhasorDiagramVector { Label = $"U{i + 1}", Value = rows[i].VoltagePhasor });
+            }
+            result.VectorDiagrams.Add(currents);
+            result.VectorDiagrams.Add(voltages);
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var elementVoltages = CalculateElementVoltages(rows[i]);
+                if (elementVoltages.Values.Any(value => !value.HasValue)) continue;
+
+                var diagram = new PhasorDiagramData
+                {
+                    Title = $"Ветвь {i + 1}: напряжения элементов",
+                    Description = $"Векторы элементов {rows[i].Branch.ElementNames} сложены голова к хвосту; результирующий вектор равен U{i + 1}.",
+                    Unit = "В",
+                    HeadToTail = true,
+                    HasExpectedResultant = true,
+                    ExpectedResultant = rows[i].VoltagePhasor,
+                    ExpectedResultantLabel = $"U{i + 1}"
+                };
+                foreach (var element in rows[i].Branch.Elements)
+                    diagram.Vectors.Add(new PhasorDiagramVector
+                    {
+                        Label = $"U{element.Name}",
+                        Value = elementVoltages[element]!.Value
+                    });
+                result.VectorDiagrams.Add(diagram);
+            }
+
+            var voltageMap = rows.ToDictionary(row => row.Branch, row => row.VoltagePhasor);
+            foreach (var contour in CircuitContourFinder.FindAll(_graph))
+            {
+                var diagram = new PhasorDiagramData
+                {
+                    Title = $"Контур {contour.Number}: баланс напряжений",
+                    Description = "Ориентированные напряжения сложены голова к хвосту. Замкнутый многоугольник подтверждает второй закон Кирхгофа.",
+                    Unit = "В",
+                    HeadToTail = true,
+                    HasExpectedResultant = true,
+                    ExpectedResultant = Complex.Zero,
+                    ExpectedResultantLabel = "ΣU=0"
+                };
+                foreach (var branch in contour.Branches)
+                    diagram.Vectors.Add(new PhasorDiagramVector
+                    {
+                        Label = $"{(branch.Direction > 0 ? "+" : "−")}U{branchNumbers[branch.Branch]}",
+                        Value = branch.Direction * voltageMap[branch.Branch]
+                    });
+                result.VectorDiagrams.Add(diagram);
+            }
+
+            var currentMap = rows.ToDictionary(row => row.Branch, row => row.CurrentPhasor);
+            foreach (var node in _graph.Nodes)
+            {
+                var diagram = new PhasorDiagramData
+                {
+                    Title = $"Узел {node.Label}: баланс токов",
+                    Description = "Токи ориентированы от узла наружу и сложены голова к хвосту. Замыкание подтверждает первый закон Кирхгофа.",
+                    Unit = "А",
+                    HeadToTail = true,
+                    HasExpectedResultant = true,
+                    ExpectedResultant = Complex.Zero,
+                    ExpectedResultantLabel = "ΣI=0"
+                };
+                foreach (var branch in _graph.Branches.Where(b => b.StartNode == node || b.EndNode == node))
+                    diagram.Vectors.Add(new PhasorDiagramVector
+                    {
+                        Label = $"{(branch.StartNode == node ? "+" : "−")}I{branchNumbers[branch]}",
+                        Value = branch.StartNode == node ? currentMap[branch] : -currentMap[branch]
+                    });
+                result.VectorDiagrams.Add(diagram);
+            }
         }
 
         private string BuildContourVectors(IReadOnlyList<BranchResult> rows)
