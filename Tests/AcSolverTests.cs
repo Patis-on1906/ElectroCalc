@@ -2,6 +2,8 @@ using System.Numerics;
 using System.Windows;
 using ElectroCalc.Core.Models;
 using ElectroCalc.Core.Solvers;
+using ElectroCalc.UI.Views;
+using OxyPlot.Annotations;
 using Xunit;
 
 namespace ElectroCalc.Tests;
@@ -210,6 +212,69 @@ public class AcSolverTests
         Near(u / z1, Row(result, l1).CurrentPhasor);
         Near(-u / z2, Row(result, l2).CurrentPhasor);
         Near(-(u / z1 + u / z2), Row(result, feed).CurrentPhasor);
+    }
+
+    [Fact]
+    public void VectorModeBuildsPlotReadyBranchElementContourAndNodeData()
+    {
+        var g = Graph();
+        Branch(g, 0, 1, E(ElementType.VoltageSource, 20, 30, 1));
+        Branch(g, 0, 1,
+            E(ElementType.Resistor, 4),
+            E(ElementType.Inductor, 3 / (100 * Math.PI)));
+
+        var result = new VectorDiagramDataSolver(g, Ac()).Solve();
+        Healthy(g, result);
+
+        var branchCurrents = Assert.Single(result.VectorDiagrams, d => d.Title == "Токи ветвей");
+        var branchVoltages = Assert.Single(result.VectorDiagrams, d => d.Title == "Напряжения ветвей");
+        Assert.False(branchCurrents.HeadToTail);
+        Assert.False(branchVoltages.HeadToTail);
+        Assert.Equal(g.Branches.Count, branchCurrents.Vectors.Count);
+        Assert.Equal(g.Branches.Count, branchVoltages.Vectors.Count);
+
+        var loadElements = Assert.Single(result.VectorDiagrams,
+            d => d.Title == "Ветвь 2: напряжения элементов");
+        Assert.True(loadElements.HeadToTail);
+        Assert.True(loadElements.HasExpectedResultant);
+        Assert.Equal(2, loadElements.Vectors.Count);
+        Near(loadElements.ExpectedResultant, loadElements.ActualResultant);
+        Assert.True(loadElements.ClosureError < 1e-10);
+
+        var contours = result.VectorDiagrams.Where(d => d.Title.StartsWith("Контур ")).ToList();
+        Assert.NotEmpty(contours);
+        Assert.All(contours, diagram =>
+        {
+            Assert.True(diagram.HeadToTail);
+            Assert.True(diagram.HasExpectedResultant);
+            Near(Complex.Zero, diagram.ActualResultant);
+        });
+
+        var nodes = result.VectorDiagrams.Where(d => d.Title.StartsWith("Узел ")).ToList();
+        Assert.Equal(g.Nodes.Count, nodes.Count);
+        Assert.All(nodes, diagram =>
+        {
+            Assert.True(diagram.HeadToTail);
+            Assert.True(diagram.HasExpectedResultant);
+            Near(Complex.Zero, diagram.ActualResultant);
+        });
+
+        Assert.All(result.VectorDiagrams.SelectMany(d => d.Vectors), vector =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(vector.Label));
+            Assert.True(double.IsFinite(vector.Value.Real));
+            Assert.True(double.IsFinite(vector.Value.Imaginary));
+        });
+
+        foreach (var diagram in result.VectorDiagrams)
+        {
+            var plot = VectorDiagramWindow.CreatePlotModel(diagram);
+            Assert.Equal(2, plot.Axes.Count);
+            Assert.Equal(plot.Axes[0].Maximum - plot.Axes[0].Minimum,
+                         plot.Axes[1].Maximum - plot.Axes[1].Minimum, 12);
+            int nonZeroVectors = diagram.Vectors.Count(v => v.Value.Magnitude > 1e-14);
+            Assert.True(plot.Annotations.OfType<ArrowAnnotation>().Count() >= nonZeroVectors);
+        }
     }
 
     [Theory]
