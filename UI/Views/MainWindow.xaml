@@ -136,18 +136,15 @@
                         </StackPanel>
 
                         <StackPanel x:Name="PanelThreePhase" Visibility="Collapsed" Margin="0,7,0,0">
-                            <TextBlock Text="Соединение нагрузки:" FontSize="11"
+                            <Button x:Name="BtnThreePhaseBuilder"
+                                    Content="⚙ Настроить и построить 3Φ"
+                                    Padding="6,4" Click="BtnThreePhaseBuilder_Click"/>
+                            <TextBlock x:Name="TxtThreePhaseSummary"
+                                       Text="Звезда с N; схема ещё не сформирована."
+                                       FontSize="10" TextWrapping="Wrap" Margin="0,5,0,0"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
-                            <ComboBox x:Name="CmbThreePhaseConnection" Margin="0,3,0,4" FontSize="11"
-                                      SelectionChanged="ThreePhaseSettings_Changed">
-                                <ComboBoxItem Content="Звезда" Tag="Star" IsSelected="True"/>
-                                <ComboBoxItem Content="Треугольник" Tag="Delta"/>
-                            </ComboBox>
-                            <CheckBox x:Name="ChkThreePhaseNeutral" Content="Нулевой провод N"
-                                      IsChecked="True" FontSize="11" Margin="0,2,0,2"
-                                      Checked="ThreePhaseSettings_Changed" Unchecked="ThreePhaseSettings_Changed"/>
-                            <TextBlock Text="Источники E задаются как фазные RMS E_A/E_B/E_C (обычно фазы 0°, −120°, +120°). Назначьте каждому E/R/L/C A, B или C. Для Δ: A=AB, B=BC, C=CA."
-                                       FontSize="9" TextWrapping="Wrap" Margin="0,3,0,0"
+                            <TextBlock Text="Введите одну фазную ЭДС и сопротивления R+jX трёх ветвей — источники, элементы и проводники будут созданы автоматически."
+                                       FontSize="9" TextWrapping="Wrap" Margin="0,4,0,0"
                                        Foreground="{StaticResource TextSecondaryBrush}"/>
                         </StackPanel>
                     </StackPanel>

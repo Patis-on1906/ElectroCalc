@@ -140,6 +140,72 @@ public class RotationTests
         finally { window.Close(); app.Shutdown(); }
     });
 
+    [Fact]
+    public void ThreePhaseBuilderCreatesCompleteSchematicsForEveryMode() => Sta(() =>
+    {
+        var app = new App();
+        app.InitializeComponent();
+        var window = new MainWindow();
+        try
+        {
+            foreach (var mode in new[]
+                     {
+                         ThreePhaseCircuitMode.StarWithNeutral,
+                         ThreePhaseCircuitMode.StarWithoutNeutral,
+                         ThreePhaseCircuitMode.Delta
+                     })
+            {
+                var definition = ThreePhaseCircuitFactory.Create(new ThreePhaseCircuitInput
+                {
+                    Mode = mode,
+                    FrequencyHz = 50,
+                    PhaseEmfRms = 220,
+                    BranchA = new() { ResistanceOhms = 10, ReactanceOhms = 4 },
+                    BranchB = new() { ResistanceOhms = 12, ReactanceOhms = -3 },
+                    BranchC = new() { ResistanceOhms = 8, ReactanceOhms = 2 }
+                });
+
+                Invoke(window, "GenerateThreePhaseSchematic", definition);
+                var controls = Field<List<ElementControl>>(window, "_elements");
+                var wires = Field<List<WireVisual>>(window, "_wires");
+                var junctions = Field<List<JunctionControl>>(window, "_junctions");
+                Assert.Equal(9, controls.Count); // 3 E + (R and L/C) × 3 branches
+                Assert.Equal(3, controls.Count(c => c.Element.Type == ElementType.VoltageSource));
+                Assert.All(controls.Where(c => c.Element.Type == ElementType.VoltageSource),
+                    c => Assert.Equal(220, c.Element.Value));
+                Assert.Equal(new[] { 0.0, -120.0, 120.0 }, controls
+                    .Where(c => c.Element.Type == ElementType.VoltageSource)
+                    .OrderBy(c => c.Element.PhaseAssignment)
+                    .Select(c => c.Element.PhaseDegrees));
+                Assert.All(controls, c => Assert.NotEqual(ThreePhasePhase.None, c.Element.PhaseAssignment));
+
+                if (mode == ThreePhaseCircuitMode.Delta)
+                {
+                    Assert.Equal(4, junctions.Count); // нейтраль источника + A/B/C нагрузки
+                    Assert.Equal(15, wires.Count);
+                }
+                else
+                {
+                    Assert.Equal(2, junctions.Count); // нейтрали источника и нагрузки
+                    Assert.Equal(mode == ThreePhaseCircuitMode.StarWithNeutral ? 13 : 12, wires.Count);
+                }
+
+                var settings = definition.Settings;
+                var result = new ThreePhaseCircuitSolver(controls.Select(c => c.Element), settings).Solve();
+                Assert.True(result.Success, result.ErrorMessage);
+                Assert.True(result.PowerBalanceOk);
+
+                var saved = (CircuitProjectFile)Invoke(window, "BuildProjectFile")!;
+                Assert.Equal(CircuitAnalysisMode.ThreePhase, saved.Analysis.Mode);
+                Assert.Equal(settings.ThreePhaseConnection, saved.Analysis.ThreePhaseConnection);
+                Assert.Equal(settings.ThreePhaseHasNeutral, saved.Analysis.ThreePhaseHasNeutral);
+                Assert.Equal(controls.Count, saved.Elements.Count);
+                Assert.Equal(wires.Count, saved.Wires.Count);
+            }
+        }
+        finally { window.Close(); app.Shutdown(); }
+    });
+
     [Theory]
     [InlineData(1)] [InlineData(2)] [InlineData(3)]
     public void LegacyFilesDefaultToHorizontal(int version)

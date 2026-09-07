@@ -1,0 +1,103 @@
+<Window x:Class="ElectroCalc.UI.Views.ThreePhaseSetupDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Конструктор трёхфазной цепи"
+        Width="590" Height="510" MinWidth="540" MinHeight="470"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{StaticResource BackgroundBrush}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Параметры 3Φ-схемы" FontSize="18" FontWeight="SemiBold"
+                   Foreground="{StaticResource PrimaryBrush}" Margin="0,0,0,12"/>
+
+        <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                CornerRadius="6" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="55"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Режим нагрузки:" VerticalAlignment="Center"/>
+                <ComboBox x:Name="CmbMode" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
+                          Margin="4" Padding="5,3" SelectionChanged="CmbMode_SelectionChanged">
+                    <ComboBoxItem Content="Звезда с нулевым проводом N" Tag="StarWithNeutral" IsSelected="True"/>
+                    <ComboBoxItem Content="Звезда без нулевого провода" Tag="StarWithoutNeutral"/>
+                    <ComboBoxItem Content="Треугольник" Tag="Delta"/>
+                </ComboBox>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Частота:" VerticalAlignment="Center"/>
+                <TextBox x:Name="TxtFrequency" Grid.Row="1" Grid.Column="1" Margin="4" Padding="5,3"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Гц" VerticalAlignment="Center" Margin="4"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Фазная ЭДС (RMS):" VerticalAlignment="Center"/>
+                <TextBox x:Name="TxtEmf" Grid.Row="2" Grid.Column="1" Margin="4" Padding="5,3"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="В" VerticalAlignment="Center" Margin="4"/>
+            </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="2"
+                   Text="Комплексные сопротивления ветвей Z=R+jX"
+                   FontWeight="SemiBold" Margin="2,2,0,6"/>
+
+        <Border Grid.Row="3" Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                CornerRadius="6" Padding="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Ветвь" FontWeight="SemiBold" Margin="4"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="R, Ом" FontWeight="SemiBold" Margin="4"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="X, Ом" FontWeight="SemiBold" Margin="4"/>
+
+                <TextBlock x:Name="LblBranchA" Grid.Row="1" Grid.Column="0" Text="AN" VerticalAlignment="Center" Margin="4"/>
+                <TextBox x:Name="TxtRA" Grid.Row="1" Grid.Column="1" Margin="4" Padding="5,3"/>
+                <TextBox x:Name="TxtXA" Grid.Row="1" Grid.Column="2" Margin="4" Padding="5,3"/>
+
+                <TextBlock x:Name="LblBranchB" Grid.Row="2" Grid.Column="0" Text="BN" VerticalAlignment="Center" Margin="4"/>
+                <TextBox x:Name="TxtRB" Grid.Row="2" Grid.Column="1" Margin="4" Padding="5,3"/>
+                <TextBox x:Name="TxtXB" Grid.Row="2" Grid.Column="2" Margin="4" Padding="5,3"/>
+
+                <TextBlock x:Name="LblBranchC" Grid.Row="3" Grid.Column="0" Text="CN" VerticalAlignment="Center" Margin="4"/>
+                <TextBox x:Name="TxtRC" Grid.Row="3" Grid.Column="1" Margin="4" Padding="5,3"/>
+                <TextBox x:Name="TxtXC" Grid.Row="3" Grid.Column="2" Margin="4" Padding="5,3"/>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Margin="4,12,4,0"
+                           TextWrapping="Wrap" Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="X &gt; 0 — индуктивная составляющая, X &lt; 0 — ёмкостная. Программа автоматически создаст L или C для указанной частоты. Источники E_A, E_B и E_C получат одинаковое RMS-значение и фазы 0°, −120°, +120°."/>
+            </Grid>
+        </Border>
+
+        <DockPanel Grid.Row="4" Margin="0,14,0,0">
+            <Button DockPanel.Dock="Right" Content="Отмена" Width="90" Padding="8,5"
+                    IsCancel="True" Margin="8,0,0,0"/>
+            <Button DockPanel.Dock="Right" Content="Сформировать схему" Width="160" Padding="8,5"
+                    IsDefault="True" Click="BtnBuild_Click"/>
+        </DockPanel>
+    </Grid>
+</Window>

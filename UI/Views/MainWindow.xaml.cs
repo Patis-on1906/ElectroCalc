@@ -58,6 +58,7 @@ namespace ElectroCalc.UI.Views
         private CalculationResult? _lastResult;
         private VectorDiagramWindow? _vectorDiagramWindow;
         private readonly CircuitAnalysisSettings _analysisSettings = new();
+        private ThreePhaseCircuitInput _threePhaseInput = new();
         private ThreeBranchOpportunity? _simplifiedOpportunity;
 
         // ════════════════════════════════════════════════════════════════════════
@@ -472,6 +473,237 @@ namespace ElectroCalc.UI.Views
             return ctrl;
         }
 
+        // ── Автоматический конструктор 3Φ-схемы ──────────────────────────────
+        private void BtnThreePhaseBuilder_Click(object sender, RoutedEventArgs e) => OpenThreePhaseBuilder();
+
+        private void OpenThreePhaseBuilder()
+        {
+            var dlg = new ThreePhaseSetupDialog(CurrentThreePhaseInput()) { Owner = this };
+            if (dlg.ShowDialog() != true || dlg.Definition == null) return;
+
+            if ((_elements.Count > 0 || _junctions.Count > 0 || _wires.Count > 0) &&
+                MessageBox.Show("Заменить текущую схему автоматически построенной 3Φ-схемой?",
+                    "Построение 3Φ-схемы", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            GenerateThreePhaseSchematic(dlg.Definition);
+        }
+
+        /// <summary>
+        /// Создаёт на холсте каноническую звезду или треугольник. Метод отделён
+        /// от диалога, чтобы построение можно было проверить WPF-автотестом.
+        /// </summary>
+        private void GenerateThreePhaseSchematic(ThreePhaseCircuitDefinition definition)
+        {
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
+
+            ClearSchematic();
+            _threePhaseInput = definition.Input.Clone();
+            _analysisSettings.Mode = CircuitAnalysisMode.ThreePhase;
+            _analysisSettings.FrequencyHz = definition.Settings.FrequencyHz;
+            _analysisSettings.ThreePhaseConnection = definition.Settings.ThreePhaseConnection;
+            _analysisSettings.ThreePhaseHasNeutral = definition.Settings.ThreePhaseHasNeutral;
+            TxtFrequency.Text = definition.Settings.FrequencyHz.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+            RbThreePhase.IsChecked = true;
+            UpdateAnalysisModeUi();
+
+            ElementControl Place(CircuitElement element, Point position, int rotation = 0)
+            {
+                var control = PlaceElement(element.Type, element.Name, element.Value,
+                    element.IsPositiveAtStart, element.InternalResistance, position,
+                    element.PhaseDegrees, rotation);
+                control.Element.PhaseAssignment = element.PhaseAssignment;
+                control.UpdateVisual();
+                return control;
+            }
+
+            var phases = new[] { ThreePhasePhase.A, ThreePhasePhase.B, ThreePhasePhase.C };
+            var rowY = new Dictionary<ThreePhasePhase, double>
+            {
+                [ThreePhasePhase.A] = 200,
+                [ThreePhasePhase.B] = 400,
+                [ThreePhasePhase.C] = 600
+            };
+            var sources = new Dictionary<ThreePhasePhase, ElementControl>();
+            foreach (var phase in phases)
+            {
+                var source = definition.Elements.Single(e =>
+                    e.Type == ElementType.VoltageSource && e.PhaseAssignment == phase);
+                // Поворот 180° оставляет фазный порт A справа, нейтральный B слева.
+                sources[phase] = Place(source, new Point(260, rowY[phase]), 180);
+            }
+
+            var sourceNeutral = PlaceJunction(new Point(120, 780));
+            foreach (var phase in phases)
+                Connect(sources[phase], false, sourceNeutral);
+
+            if (definition.Settings.ThreePhaseConnection == ThreePhaseLoadConnection.Star)
+                BuildGeneratedStar(definition, sources, sourceNeutral, Place);
+            else
+                BuildGeneratedDelta(definition, sources, Place);
+
+            foreach (var wire in _wires) wire.UpdateGeometry();
+            string? warning = RebuildGraphFromSchematic();
+            CanvasScroll.ScrollToHorizontalOffset(0);
+            CanvasScroll.ScrollToVerticalOffset(0);
+            UpdateThreePhaseSummary();
+            SetStatus(warning == null
+                ? "✓ Трёхфазная схема сформирована. Нажмите «Рассчитать»."
+                : $"⚠ Схема сформирована. {warning}");
+        }
+
+        private void BuildGeneratedStar(ThreePhaseCircuitDefinition definition,
+            IReadOnlyDictionary<ThreePhasePhase, ElementControl> sources,
+            JunctionControl sourceNeutral,
+            Func<CircuitElement, Point, int, ElementControl> place)
+        {
+            var phases = new[] { ThreePhasePhase.A, ThreePhasePhase.B, ThreePhasePhase.C };
+            var rowY = new[] { 200.0, 400.0, 600.0 };
+            var loadNeutral = PlaceJunction(new Point(1060, 780));
+
+            for (int k = 0; k < phases.Length; k++)
+            {
+                var loadElements = definition.Elements.Where(e =>
+                    e.PhaseAssignment == phases[k] && e.Type != ElementType.VoltageSource).ToList();
+                var x = HorizontalPositions(loadElements.Count, 690, 850);
+                var load = loadElements.Select((element, index) =>
+                    place(element, new Point(x[index], rowY[k]), 0)).ToList();
+
+                Connect(sources[phases[k]], true, load[0], true);
+                for (int n = 0; n + 1 < load.Count; n++)
+                    Connect(load[n], false, load[n + 1], true);
+                Connect(load[^1], false, loadNeutral);
+            }
+
+            if (definition.Settings.ThreePhaseHasNeutral)
+                Connect(sourceNeutral, loadNeutral);
+        }
+
+        private void BuildGeneratedDelta(ThreePhaseCircuitDefinition definition,
+            IReadOnlyDictionary<ThreePhasePhase, ElementControl> sources,
+            Func<CircuitElement, Point, int, ElementControl> place)
+        {
+            var nodeA = PlaceJunction(new Point(600, 180));
+            var nodeB = PlaceJunction(new Point(1040, 180));
+            var nodeC = PlaceJunction(new Point(600, 700));
+            Connect(sources[ThreePhasePhase.A], true, nodeA);
+            Connect(sources[ThreePhasePhase.B], true, nodeB);
+            Connect(sources[ThreePhasePhase.C], true, nodeC);
+
+            var ab = LoadElements(definition, ThreePhasePhase.A)
+                .Select((element, index) => place(element,
+                    new Point(HorizontalPositions(LoadElements(definition, ThreePhasePhase.A).Count, 750, 910)[index], 180), 0))
+                .ToList();
+            Connect(nodeA, ab[0], true);
+            ConnectSeries(ab);
+            Connect(ab[^1], false, nodeB);
+
+            var bcElements = LoadElements(definition, ThreePhasePhase.B);
+            var bcY = VerticalPositions(bcElements.Count, 350, 530);
+            var bc = bcElements.Select((element, index) =>
+                place(element, new Point(1040, bcY[index]), 90)).ToList();
+            Connect(nodeB, bc[0], true);
+            ConnectSeries(bc);
+            Connect(bc[^1], false, nodeC);
+
+            // Ветвь CA ориентирована снизу вверх: порт A каждого элемента смотрит к C.
+            var caElements = LoadElements(definition, ThreePhasePhase.C);
+            var caY = VerticalPositions(caElements.Count, 530, 350);
+            var ca = caElements.Select((element, index) =>
+                place(element, new Point(600, caY[index]), 270)).ToList();
+            Connect(nodeC, ca[0], true);
+            ConnectSeries(ca);
+            Connect(ca[^1], false, nodeA);
+        }
+
+        private static List<CircuitElement> LoadElements(ThreePhaseCircuitDefinition definition, ThreePhasePhase phase) =>
+            definition.Elements.Where(e => e.PhaseAssignment == phase && e.Type != ElementType.VoltageSource).ToList();
+
+        private static double[] HorizontalPositions(int count, double first, double second) =>
+            count == 1 ? new[] { (first + second) / 2.0 } : new[] { first, second };
+
+        private static double[] VerticalPositions(int count, double first, double second) =>
+            count == 1 ? new[] { (first + second) / 2.0 } : new[] { first, second };
+
+        private void ConnectSeries(IReadOnlyList<ElementControl> controls)
+        {
+            for (int i = 0; i + 1 < controls.Count; i++)
+                Connect(controls[i], false, controls[i + 1], true);
+        }
+
+        private void Connect(ElementControl from, bool fromPortA, ElementControl to, bool toPortA) =>
+            AddWireVisual(fromPortA ? from.PortA : from.PortB, toPortA ? to.PortA : to.PortB, null,
+                from.Id, fromPortA, true, to.Id, toPortA, true);
+
+        private void Connect(ElementControl from, bool fromPortA, JunctionControl to) =>
+            AddWireVisual(fromPortA ? from.PortA : from.PortB, to.Position, null,
+                from.Id, fromPortA, true, to.Id, false, false);
+
+        private void Connect(JunctionControl from, ElementControl to, bool toPortA) =>
+            AddWireVisual(from.Position, toPortA ? to.PortA : to.PortB, null,
+                from.Id, false, false, to.Id, toPortA, true);
+
+        private void Connect(JunctionControl from, JunctionControl to) =>
+            AddWireVisual(from.Position, to.Position, null,
+                from.Id, false, false, to.Id, false, false);
+
+        private ThreePhaseCircuitInput CurrentThreePhaseInput()
+        {
+            var input = _threePhaseInput.Clone();
+            input.Mode = ModeFromSettings(_analysisSettings);
+            input.FrequencyHz = _analysisSettings.FrequencyHz;
+
+            var sources = _elements.Where(e => e.Element.Type == ElementType.VoltageSource).ToList();
+            var sourceA = sources.FirstOrDefault(e => e.Element.PhaseAssignment == ThreePhasePhase.A);
+            if (sourceA != null) input.PhaseEmfRms = sourceA.Element.Value;
+
+            if (_analysisSettings.AngularFrequency > 0)
+            {
+                input.BranchA = BranchInputFromElements(ThreePhasePhase.A, input.BranchA);
+                input.BranchB = BranchInputFromElements(ThreePhasePhase.B, input.BranchB);
+                input.BranchC = BranchInputFromElements(ThreePhasePhase.C, input.BranchC);
+            }
+            return input;
+        }
+
+        private ThreePhaseBranchInput BranchInputFromElements(ThreePhasePhase phase, ThreePhaseBranchInput fallback)
+        {
+            var load = _elements.Select(c => c.Element).Where(e =>
+                e.PhaseAssignment == phase &&
+                (e.Type is ElementType.Resistor or ElementType.Inductor or ElementType.Capacitor)).ToList();
+            if (load.Count == 0) return fallback.Clone();
+
+            double r = load.Where(e => e.Type == ElementType.Resistor).Sum(e => e.Value);
+            double x = load.Where(e => e.Type == ElementType.Inductor).Sum(e => _analysisSettings.AngularFrequency * e.Value);
+            x += load.Where(e => e.Type == ElementType.Capacitor && e.Value > 0)
+                .Sum(e => -1.0 / (_analysisSettings.AngularFrequency * e.Value));
+            return new ThreePhaseBranchInput { ResistanceOhms = r, ReactanceOhms = x };
+        }
+
+        private static ThreePhaseCircuitMode ModeFromSettings(CircuitAnalysisSettings settings) =>
+            settings.ThreePhaseConnection == ThreePhaseLoadConnection.Delta
+                ? ThreePhaseCircuitMode.Delta
+                : settings.ThreePhaseHasNeutral
+                    ? ThreePhaseCircuitMode.StarWithNeutral
+                    : ThreePhaseCircuitMode.StarWithoutNeutral;
+
+        private void UpdateThreePhaseSummary()
+        {
+            if (TxtThreePhaseSummary == null) return;
+            var input = CurrentThreePhaseInput();
+            string mode = input.Mode switch
+            {
+                ThreePhaseCircuitMode.StarWithNeutral => "звезда с N",
+                ThreePhaseCircuitMode.StarWithoutNeutral => "звезда без N",
+                _ => "треугольник"
+            };
+            TxtThreePhaseSummary.Text = $"{mode}; Eφ={input.PhaseEmfRms:G6} В; " +
+                $"A: {FormatImpedance(input.BranchA)}, B: {FormatImpedance(input.BranchB)}, C: {FormatImpedance(input.BranchC)}";
+        }
+
+        private static string FormatImpedance(ThreePhaseBranchInput branch) =>
+            $"{branch.ResistanceOhms:G5}{(branch.ReactanceOhms < 0 ? "−" : "+")}j{Math.Abs(branch.ReactanceOhms):G5} Ом";
+
         // ── Place junction ─────────────────────────────────────────────────────
         private JunctionControl PlaceJunction(Point pt)
         {
@@ -498,6 +730,11 @@ namespace ElectroCalc.UI.Views
             if (e.ClickCount == 2 && !_wiringMode)
             {
                 e.Handled = true;
+                if (_analysisSettings.Mode == CircuitAnalysisMode.ThreePhase)
+                {
+                    OpenThreePhaseBuilder();
+                    return;
+                }
                 var pt  = Snap(e.GetPosition(SchematicCanvas));
                 var dlg = new ElementPickerDialog(_analysisSettings.Mode) { Owner = this };
                 if (dlg.ShowDialog() != true) return;
@@ -757,7 +994,11 @@ namespace ElectroCalc.UI.Views
             _suppressPropEvents = true;
             var el = ctrl.Element;
             PropPanel.Visibility    = Visibility.Visible;
-            TxtSelectedElement.Text = $"{el.Type}: {el.Name}";
+            bool generatedThreePhase = _analysisSettings.Mode == CircuitAnalysisMode.ThreePhase;
+            PropPanel.IsEnabled = !generatedThreePhase;
+            TxtSelectedElement.Text = generatedThreePhase
+                ? $"{el.Type}: {el.Name} (изменение через конструктор 3Φ)"
+                : $"{el.Type}: {el.Name}";
             TxtPropName.Text        = el.Name;
             TxtPropValue.Text       = el.Value.ToString("G");
             TxtPropUnit.Text        = UnitFor(el.Type);
@@ -768,8 +1009,9 @@ namespace ElectroCalc.UI.Views
             bool phasorMode = _analysisSettings.IsPhasorMode;
             PropPhase.Visibility     = src && phasorMode ? Visibility.Visible : Visibility.Collapsed;
             TxtPropValueLabel.Text   = src && phasorMode ? "Действующее значение (RMS):" : "Значение:";
-            PropThreePhasePhase.Visibility = _analysisSettings.Mode == CircuitAnalysisMode.ThreePhase
-                ? Visibility.Visible : Visibility.Collapsed;
+            // В режиме 3Φ назначения создаёт конструктор схемы. Ручное изменение
+            // A/B/C скрыто, чтобы видимая топология и расчётная модель не расходились.
+            PropThreePhasePhase.Visibility = Visibility.Collapsed;
             SelectThreePhasePhaseCombo(el.PhaseAssignment);
             ChkPolarity.Visibility   = src ? Visibility.Visible  : Visibility.Collapsed;
             ChkPolarity.IsChecked    = el.IsPositiveAtStart;
@@ -779,6 +1021,7 @@ namespace ElectroCalc.UI.Views
         private void HideProperties()
         {
             PropPanel.Visibility    = Visibility.Collapsed;
+            PropPanel.IsEnabled     = true;
             TxtSelectedElement.Text = "Выберите элемент на схеме";
         }
 
@@ -868,15 +1111,19 @@ namespace ElectroCalc.UI.Views
 
         // ── Toolbar ────────────────────────────────────────────────────────────
         private void BtnAddResistor_Click (object s, RoutedEventArgs e) =>
-            SetStatus("2×клик на холсте → «R Резистор».");
+            SetAddElementStatus("2×клик на холсте → «R Резистор».");
         private void BtnAddESource_Click  (object s, RoutedEventArgs e) =>
-            SetStatus("2×клик на холсте → «E Источник ЭДС».");
+            SetAddElementStatus("2×клик на холсте → «E Источник ЭДС».");
         private void BtnAddJSource_Click  (object s, RoutedEventArgs e) =>
-            SetStatus("2×клик на холсте → «J Источник тока».");
+            SetAddElementStatus("2×клик на холсте → «J Источник тока».");
         private void BtnAddCapacitor_Click(object s, RoutedEventArgs e) =>
-            SetStatus("2×клик на холсте → «C Конденсатор».");
+            SetAddElementStatus("2×клик на холсте → «C Конденсатор».");
         private void BtnAddInductor_Click (object s, RoutedEventArgs e) =>
-            SetStatus("2×клик на холсте → «L Индуктивность».");
+            SetAddElementStatus("2×клик на холсте → «L Индуктивность».");
+        private void SetAddElementStatus(string ordinaryMessage) =>
+            SetStatus(_analysisSettings.Mode == CircuitAnalysisMode.ThreePhase
+                ? "В режиме 3Φ элементы создаются автоматически через конструктор."
+                : ordinaryMessage);
         private void BtnModeWire_Click  (object s, RoutedEventArgs e) =>
             SetStatus("Тяни от ● порта или точки соединения для провода.");
         private void BtnModeSelect_Click(object s, RoutedEventArgs e) =>
@@ -1178,6 +1425,11 @@ namespace ElectroCalc.UI.Views
             foreach (var wire in _wires) wire.UpdateGeometry();
             DeselectAll();
             InvalidateResult();
+            if (_analysisSettings.Mode == CircuitAnalysisMode.ThreePhase)
+            {
+                _threePhaseInput = CurrentThreePhaseInput();
+                UpdateThreePhaseSummary();
+            }
 
             return warning;
         }
@@ -1583,10 +1835,6 @@ namespace ElectroCalc.UI.Views
                     throw new InvalidOperationException("Для 3Φ задайте частоту больше 0 Гц.");
                 _analysisSettings.Mode = CircuitAnalysisMode.ThreePhase;
                 _analysisSettings.FrequencyHz = f;
-                _analysisSettings.ThreePhaseConnection = SelectedThreePhaseConnection();
-                _analysisSettings.ThreePhaseHasNeutral =
-                    _analysisSettings.ThreePhaseConnection == ThreePhaseLoadConnection.Star &&
-                    ChkThreePhaseNeutral.IsChecked == true;
             }
             else if (RbAC.IsChecked == true)
             {
@@ -1602,76 +1850,34 @@ namespace ElectroCalc.UI.Views
             return _analysisSettings.Clone();
         }
 
-        private ThreePhaseLoadConnection SelectedThreePhaseConnection()
-        {
-            if (CmbThreePhaseConnection?.SelectedItem is ComboBoxItem item &&
-                Enum.TryParse<ThreePhaseLoadConnection>(item.Tag?.ToString(), true, out var connection))
-                return connection;
-            return ThreePhaseLoadConnection.Star;
-        }
-
-        private void SelectThreePhaseConnection(ThreePhaseLoadConnection connection)
-        {
-            // XAML selection events may fire while InitializeComponent() is still
-            // constructing the visual tree. The ComboBox can therefore be unavailable
-            // when this helper is reached indirectly from an initialization event.
-            if (CmbThreePhaseConnection == null) return;
-
-            foreach (var obj in CmbThreePhaseConnection.Items)
-                if (obj is ComboBoxItem item && string.Equals(item.Tag?.ToString(), connection.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    CmbThreePhaseConnection.SelectedItem = item;
-                    return;
-                }
-            CmbThreePhaseConnection.SelectedIndex = 0;
-        }
-
         private void AnalysisMode_Changed(object sender, RoutedEventArgs e)
         {
             if (PanelFrequency == null) return;
             _analysisSettings.Mode = RbThreePhase?.IsChecked == true
                 ? CircuitAnalysisMode.ThreePhase
                 : RbAC?.IsChecked == true ? CircuitAnalysisMode.AC : CircuitAnalysisMode.DC;
-            if (_analysisSettings.Mode == CircuitAnalysisMode.ThreePhase)
-            {
-                _analysisSettings.ThreePhaseConnection = SelectedThreePhaseConnection();
-                _analysisSettings.ThreePhaseHasNeutral = ChkThreePhaseNeutral?.IsChecked == true;
-            }
             UpdateAnalysisModeUi();
             RefreshSimplifiedOpportunity();
             InvalidateResult();
             if (IsLoaded)
                 SetStatus(_analysisSettings.Mode switch
                 {
-                    CircuitAnalysisMode.ThreePhase => "3Φ-режим: назначьте источникам и R/L/C элементы фазам A/B/C; выберите звезду/треугольник и нулевой провод.",
+                    CircuitAnalysisMode.ThreePhase => "3Φ-режим: откройте конструктор, задайте одну фазную ЭДС и сопротивления ветвей R+jX.",
                     CircuitAnalysisMode.AC => "AC-режим: источники задаются RMS и фазой; доступны МУП, МКТ, законы Кирхгофа, МЭГ, P/Q/S, мгновенные функции и векторные данные.",
                     _ => "DC-режим: восстановлены правила C=разрыв, L=КЗ."
                 });
-        }
-
-        private void ThreePhaseSettings_Changed(object sender, RoutedEventArgs e)
-        {
-            // SelectionChanged of CmbThreePhaseConnection is raised during
-            // InitializeComponent(), before the following CheckBox has necessarily
-            // been created. Do not process a partially constructed control tree.
-            if (PanelThreePhase == null || CmbThreePhaseConnection == null || ChkThreePhaseNeutral == null)
-                return;
-
-            var connection = SelectedThreePhaseConnection();
-            _analysisSettings.ThreePhaseConnection = connection;
-            ChkThreePhaseNeutral.IsEnabled = connection == ThreePhaseLoadConnection.Star;
-            if (connection == ThreePhaseLoadConnection.Delta)
-                ChkThreePhaseNeutral.IsChecked = false;
-            _analysisSettings.ThreePhaseHasNeutral = connection == ThreePhaseLoadConnection.Star && ChkThreePhaseNeutral.IsChecked == true;
-            InvalidateResult();
-            if (_selectedElem != null) ShowElementProperties(_selectedElem);
         }
 
         private void TxtFrequency_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (TxtFrequency == null) return;
             if (TryParseUiNumber(TxtFrequency.Text, out double f) && f > 0)
+            {
                 _analysisSettings.FrequencyHz = f;
+                _threePhaseInput.FrequencyHz = f;
+                if (_analysisSettings.Mode == CircuitAnalysisMode.ThreePhase)
+                    UpdateThreePhaseSummary();
+            }
             RefreshSimplifiedOpportunity();
             InvalidateResult();
         }
@@ -1688,11 +1894,7 @@ namespace ElectroCalc.UI.Views
             PanelThreePhase.Visibility = three ? Visibility.Visible : Visibility.Collapsed;
 
             if (three)
-            {
-                SelectThreePhaseConnection(_analysisSettings.ThreePhaseConnection);
-                ChkThreePhaseNeutral.IsChecked = _analysisSettings.ThreePhaseConnection == ThreePhaseLoadConnection.Star && _analysisSettings.ThreePhaseHasNeutral;
-                ChkThreePhaseNeutral.IsEnabled = _analysisSettings.ThreePhaseConnection == ThreePhaseLoadConnection.Star;
-            }
+                UpdateThreePhaseSummary();
 
             foreach (var rb in new[] { RbMKT, RbKirchhoff, RbMUP, RbEqGen, RbPotential, RbVector })
                 if (rb != null) rb.IsEnabled = !three;
