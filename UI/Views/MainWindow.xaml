@@ -219,10 +219,10 @@
 
                             <TextBlock x:Name="TxtPropValueLabel" Text="Значение:" FontSize="11" Margin="0,6,0,2"/>
                             <DockPanel>
-                                <TextBlock x:Name="TxtPropUnit" Text="Ом"
-                                           DockPanel.Dock="Right" FontSize="11"
-                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                           VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                <ComboBox x:Name="CmbPropUnit" DockPanel.Dock="Right" Width="72"
+                                          FontSize="11" Padding="3,2" Margin="4,0,0,0"
+                                          DisplayMemberPath="Symbol"
+                                          SelectionChanged="PropUnit_SelectionChanged"/>
                                 <TextBox x:Name="TxtPropValue" FontSize="12" Padding="4,3"
                                          BorderBrush="{StaticResource BorderBrush}"
                                          TextChanged="PropValue_TextChanged"/>

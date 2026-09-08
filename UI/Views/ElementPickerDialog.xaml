@@ -27,9 +27,9 @@
 
             <TextBlock x:Name="TxtValueLabel" Text="Значение:" FontSize="12" Margin="0,0,0,4"/>
             <DockPanel Margin="0,0,0,12">
-                <TextBlock x:Name="TxtUnit" Text="Ом" DockPanel.Dock="Right"
-                           FontSize="12" VerticalAlignment="Center" Margin="6,0,0,0"
-                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <ComboBox x:Name="CmbUnit" DockPanel.Dock="Right" Width="76"
+                          FontSize="12" Padding="4,3" Margin="6,0,0,0"
+                          DisplayMemberPath="Symbol"/>
                 <TextBox x:Name="TxtValue" FontSize="13" Padding="6,4" Text="100"/>
             </DockPanel>
 

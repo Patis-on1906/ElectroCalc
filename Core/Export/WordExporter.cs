@@ -51,22 +51,26 @@ namespace ElectroCalc.Core.Export
 
             if (result.Method != CalculationMethod.KirchhoffLaws && result.Method != CalculationMethod.PotentialDiagram)
             {
-                // Results table
-                body.AppendChild(Heading("Результаты по ветвям", "Heading1"));
-                body.AppendChild(BuildBranchTable(result));
+                if (result.ReferenceBranchResults.Count > 0)
+                {
+                    body.AppendChild(Heading("Нормальный режим до аварии", "Heading1"));
+                    body.AppendChild(BuildBranchTable(result, result.ReferenceBranchResults));
+                    AppendPowerSummary(body, "Мощности нормального режима",
+                        result.ReferenceComplexPowerGenerated, result.ReferenceComplexPowerConsumed);
+                    string emergencyName = result.ThreePhaseFault?.Description(result.Analysis)
+                        ?? "выбранная авария";
+                    body.AppendChild(Heading("Аварийный режим: " + emergencyName, "Heading1"));
+                }
+                else
+                {
+                    body.AppendChild(Heading("Результаты по ветвям", "Heading1"));
+                }
+                body.AppendChild(BuildBranchTable(result, result.BranchResults));
 
                 if (result.PowerBalanceAvailable)
-                {
-                    var sg = result.TotalComplexPowerGenerated;
-                    var sc = result.TotalComplexPowerConsumed;
-                    body.AppendChild(Heading("Баланс мощностей", "Heading1"));
-                    body.AppendChild(NormalPara($"ΣS_ист = {Phasor.Rectangular(sg)} ВА; ΣP_ист={sg.Real:F4} Вт; ΣQ_ист={sg.Imaginary:F4} вар; |ΣS_ист|={sg.Magnitude:F4} ВА"));
-                    body.AppendChild(NormalPara($"ΣS_потр = {Phasor.Rectangular(sc)} ВА; ΣP_потр={sc.Real:F4} Вт; ΣQ_потр={sc.Imaginary:F4} вар; |ΣS_потр|={sc.Magnitude:F4} ВА"));
-                    body.AppendChild(NormalPara($"Невязка |ΔS| = {result.PowerImbalance:E2} ВА"));
-                    body.AppendChild(NormalPara(result.PowerBalanceOk
-                        ? "✓ Баланс мощностей сошёлся"
-                        : "✗ Баланс не сошёлся — проверьте схему"));
-                }
+                    AppendPowerSummary(body,
+                        result.ReferenceBranchResults.Count > 0 ? "Мощности аварийного режима" : "Баланс мощностей",
+                        result.TotalComplexPowerGenerated, result.TotalComplexPowerConsumed);
             }
 
             mainPart.Document.Save();
@@ -127,7 +131,7 @@ namespace ElectroCalc.Core.Export
 
         // ── Branch results table ──────────────────────────────────────────────
 
-        private static Table BuildBranchTable(CalculationResult result)
+        private static Table BuildBranchTable(CalculationResult result, IEnumerable<BranchResult> rows)
         {
             var table = new Table();
             var tblPr = new TableProperties(
@@ -143,7 +147,7 @@ namespace ElectroCalc.Core.Export
             if (result.Analysis.Mode != CircuitAnalysisMode.DC)
             {
                 table.AppendChild(TableRow(true, "Ветвь", "I (RMS-фазор), А", "U (RMS-фазор), В", "P, Вт", "Q, вар", "|S|, ВА"));
-                foreach (var r in result.BranchResults)
+                foreach (var r in rows)
                     table.AppendChild(TableRow(false,
                         r.Branch.ToString(),
                         $"{Phasor.Rectangular(r.CurrentPhasor)} = {Phasor.Exponential(r.CurrentPhasor)}",
@@ -153,12 +157,26 @@ namespace ElectroCalc.Core.Export
             else
             {
                 table.AppendChild(TableRow(true, "Ветвь", "I, А", "U, В", "P, Вт", "Q, вар", "|S|, ВА"));
-                foreach (var r in result.BranchResults)
+                foreach (var r in rows)
                     table.AppendChild(TableRow(false,
                         r.Branch.ToString(), $"{r.Current:F4}", $"{r.Voltage:F4}",
                         $"{r.ActivePower:F4}", $"{r.ReactivePower:F4}", $"{r.ApparentPower:F4}"));
             }
             return table;
+        }
+
+        private static void AppendPowerSummary(Body body, string heading,
+            System.Numerics.Complex generated, System.Numerics.Complex consumed)
+        {
+            body.AppendChild(Heading(heading, "Heading1"));
+            body.AppendChild(NormalPara($"ΣS_ист = {Phasor.Rectangular(generated)} ВА; ΣP_ист={generated.Real:F4} Вт; ΣQ_ист={generated.Imaginary:F4} вар; |ΣS_ист|={generated.Magnitude:F4} ВА"));
+            body.AppendChild(NormalPara($"ΣS_потр = {Phasor.Rectangular(consumed)} ВА; ΣP_потр={consumed.Real:F4} Вт; ΣQ_потр={consumed.Imaginary:F4} вар; |ΣS_потр|={consumed.Magnitude:F4} ВА"));
+            double imbalance = (generated - consumed).Magnitude;
+            double tolerance = 1e-6 * Math.Max(1.0, Math.Max(generated.Magnitude, consumed.Magnitude));
+            body.AppendChild(NormalPara($"Невязка |ΔS| = {imbalance:E2} ВА"));
+            body.AppendChild(NormalPara(imbalance <= tolerance
+                ? "✓ Баланс мощностей сошёлся"
+                : "✗ Баланс не сошёлся — проверьте схему"));
         }
 
         private static TableRow TableRow(bool isHeader, params string[] cells)
