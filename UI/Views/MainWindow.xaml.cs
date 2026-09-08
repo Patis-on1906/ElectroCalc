@@ -59,6 +59,7 @@ namespace ElectroCalc.UI.Views
         private VectorDiagramWindow? _vectorDiagramWindow;
         private readonly CircuitAnalysisSettings _analysisSettings = new();
         private ThreePhaseCircuitInput _threePhaseInput = new();
+        private ThreePhaseFaultSettings _threePhaseFault = new();
         private ThreeBranchOpportunity? _simplifiedOpportunity;
 
         // ════════════════════════════════════════════════════════════════════════
@@ -1000,8 +1001,11 @@ namespace ElectroCalc.UI.Views
                 ? $"{el.Type}: {el.Name} (изменение через конструктор 3Φ)"
                 : $"{el.Type}: {el.Name}";
             TxtPropName.Text        = el.Name;
-            TxtPropValue.Text       = el.Value.ToString("G");
-            TxtPropUnit.Text        = UnitFor(el.Type);
+            CmbPropUnit.ItemsSource = ElementValueUnits.For(el.Type);
+            var displayUnit = ElementValueUnits.BestFor(el.Type, el.Value);
+            CmbPropUnit.SelectedItem = displayUnit;
+            TxtPropValue.Text       = displayUnit.FromSi(el.Value)
+                .ToString("G", System.Globalization.CultureInfo.InvariantCulture);
             TxtPropInternalR.Text   = el.InternalResistance.ToString("G");
             TxtPropPhase.Text       = el.PhaseDegrees.ToString("G");
             bool src = el.Type is ElementType.VoltageSource or ElementType.CurrentSource;
@@ -1047,11 +1051,27 @@ namespace ElectroCalc.UI.Views
                     _selectedElem.Element.Type is (ElementType.VoltageSource or ElementType.CurrentSource);
                 if ((!passive || v >= 0) && (!acSource || v >= 0))
                 {
-                    _selectedElem.Element.Value = v;
+                    var unit = CmbPropUnit.SelectedItem as ElementValueUnit;
+                    _selectedElem.Element.Value = unit?.ElementType == _selectedElem.Element.Type
+                        ? unit.ToSi(v)
+                        : v;
                     _selectedElem.UpdateVisual();
                     InvalidateResult();
                 }
             }
+        }
+
+        private void PropUnit_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressPropEvents || _selectedElem == null ||
+                CmbPropUnit.SelectedItem is not ElementValueUnit unit ||
+                unit.ElementType != _selectedElem.Element.Type)
+                return;
+
+            _suppressPropEvents = true;
+            TxtPropValue.Text = unit.FromSi(_selectedElem.Element.Value)
+                .ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+            _suppressPropEvents = false;
         }
 
         private void PropPhase_TextChanged(object s, TextChangedEventArgs e)
@@ -1535,7 +1555,12 @@ namespace ElectroCalc.UI.Views
             {
                 try
                 {
-                    var result3 = new ThreePhaseCircuitSolver(_elements.Select(x => x.Element), analysis).Solve();
+                    var modeDialog = new ThreePhaseCalculationDialog(analysis, _threePhaseFault) { Owner = this };
+                    if (modeDialog.ShowDialog() != true) return;
+                    _threePhaseFault = modeDialog.Settings.Clone();
+
+                    var result3 = new ThreePhaseCircuitSolver(
+                        _elements.Select(x => x.Element), analysis, _threePhaseFault).Solve();
                     _lastResult = result3;
                     DisplayResult(result3);
                     foreach (var element in _elements) element.Element.LastCurrentPhasor = System.Numerics.Complex.Zero;
@@ -1543,8 +1568,10 @@ namespace ElectroCalc.UI.Views
                         foreach (var element in row.Branch.Elements)
                             element.LastCurrentPhasor = row.CurrentPhasor * row.Branch.GetElementDirection(element);
                     foreach (var control in _elements) control.UpdateVisual();
+                    if (result3.Success && result3.VectorDiagrams.Count > 0)
+                        ShowVectorDiagrams(result3);
                     SetStatus(result3.Success
-                        ? $"✓ Трёхфазная цепь рассчитана: {(analysis.ThreePhaseConnection == ThreePhaseLoadConnection.Star ? "звезда" : "треугольник")}" +
+                        ? $"✓ Трёхфазная цепь рассчитана ({_threePhaseFault.Description(analysis)}): {(analysis.ThreePhaseConnection == ThreePhaseLoadConnection.Star ? "звезда" : "треугольник")}" +
                           (analysis.ThreePhaseConnection == ThreePhaseLoadConnection.Star ? (analysis.ThreePhaseHasNeutral ? ", с N." : ", без N.") : ".") +
                           (result3.PowerBalanceOk ? " Баланс мощностей ✓" : " ⚠ Баланс мощностей не сошёлся")
                         : $"❌ {result3.ErrorMessage}");
@@ -1648,7 +1675,6 @@ namespace ElectroCalc.UI.Views
         private void DisplayResult(CalculationResult result)
         {
             BtnOpenVectorDiagrams.Visibility = result.Success &&
-                                               result.Method == CalculationMethod.VectorData &&
                                                result.VectorDiagrams.Count > 0
                 ? Visibility.Visible
                 : Visibility.Collapsed;
@@ -1716,7 +1742,7 @@ namespace ElectroCalc.UI.Views
 
         private void BtnOpenVectorDiagrams_Click(object sender, RoutedEventArgs e)
         {
-            if (_lastResult is { Success: true, Method: CalculationMethod.VectorData } result &&
+            if (_lastResult is { Success: true } result &&
                 result.VectorDiagrams.Count > 0)
                 ShowVectorDiagrams(result);
         }
@@ -1930,16 +1956,6 @@ namespace ElectroCalc.UI.Views
                 System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out value) &&
             !double.IsNaN(value) && !double.IsInfinity(value);
-
-        private static string UnitFor(ElementType t) => t switch
-        {
-            ElementType.Resistor      => "Ом",
-            ElementType.VoltageSource => "В",
-            ElementType.CurrentSource => "А",
-            ElementType.Capacitor     => "Ф",
-            ElementType.Inductor      => "Гн",
-            _ => ""
-        };
 
         private void InvalidateResult()
         {

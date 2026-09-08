@@ -32,8 +32,8 @@ namespace ElectroCalc.UI.Views
         public VectorDiagramWindow(CalculationResult result)
         {
             if (result == null) throw new ArgumentNullException(nameof(result));
-            if (result.Method != CalculationMethod.VectorData || !result.Success)
-                throw new ArgumentException("Окно диаграмм требует успешный результат режима VectorData.", nameof(result));
+            if (!result.Success)
+                throw new ArgumentException("Окно диаграмм требует успешный результат расчёта.", nameof(result));
             if (result.VectorDiagrams.Count == 0)
                 throw new ArgumentException("Результат не содержит данных для построения диаграмм.", nameof(result));
 
@@ -197,7 +197,9 @@ namespace ElectroCalc.UI.Views
                 Label = vector.Label;
                 Rectangular = $"{FormatComplex(vector.Value)} {unit}";
                 Magnitude = $"{vector.Value.Magnitude:0.######}";
-                Phase = $"{Math.Atan2(vector.Value.Imaginary, vector.Value.Real) * 180 / Math.PI:0.##}°";
+                Phase = vector.Value.Magnitude <= 1e-14
+                    ? "—"
+                    : $"{Math.Atan2(vector.Value.Imaginary, vector.Value.Real) * 180 / Math.PI:0.##}°";
             }
         }
     }

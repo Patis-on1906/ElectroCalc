@@ -272,11 +272,11 @@ namespace ElectroCalc.UI.Controls
 
         private string FormatValue(CircuitElement e) => e.Type switch
         {
-            ElementType.Resistor       => $"{e.Value} Ом",
+            ElementType.Resistor       => ElementValueUnits.Format(e.Value, e.Type),
             ElementType.VoltageSource  => DisplayAnalysisMode != CircuitAnalysisMode.DC ? $"{e.Value} В RMS ∠{e.PhaseDegrees:0.##}°" : $"{e.Value} В",
             ElementType.CurrentSource  => DisplayAnalysisMode != CircuitAnalysisMode.DC ? $"{e.Value} А RMS ∠{e.PhaseDegrees:0.##}°" : $"{e.Value} А",
-            ElementType.Capacitor      => $"{e.Value} Ф",
-            ElementType.Inductor       => $"{e.Value} Гн",
+            ElementType.Capacitor      => ElementValueUnits.Format(e.Value, e.Type),
+            ElementType.Inductor       => ElementValueUnits.Format(e.Value, e.Type),
             _ => e.Value.ToString("G")
         };
 

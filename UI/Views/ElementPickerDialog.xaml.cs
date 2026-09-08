@@ -21,6 +21,7 @@ namespace ElectroCalc.UI.Views
             _analysisMode = analysisMode;
             InitializeComponent();
             UpdateModeHints();
+            SetUnits(ElementType.Resistor);
         }
 
         private void UpdateModeHints()
@@ -43,16 +44,8 @@ namespace ElectroCalc.UI.Views
             if (PanelPhase      != null) PanelPhase.Visibility       = isSource && _analysisMode != CircuitAnalysisMode.DC ? Visibility.Visible : Visibility.Collapsed;
             if (TxtValueLabel   != null) TxtValueLabel.Text          = isSource && _analysisMode != CircuitAnalysisMode.DC ? "Действующее значение (RMS):" : "Значение:";
 
-            if (TxtUnit != null)
-                TxtUnit.Text = tag switch
-                {
-                    "Resistor"      => "Ом",
-                    "VoltageSource" => "В",
-                    "CurrentSource" => "А",
-                    "Capacitor"     => "Ф",
-                    "Inductor"      => "Гн",
-                    _ => ""
-                };
+            if (CmbUnit != null && !isJunction)
+                SetUnits(TypeFromTag(tag));
 
             // Auto-name
             if (TxtName != null)
@@ -78,14 +71,7 @@ namespace ElectroCalc.UI.Views
                 return;
             }
 
-            SelectedType = tag switch
-            {
-                "VoltageSource" => ElementType.VoltageSource,
-                "CurrentSource" => ElementType.CurrentSource,
-                "Capacitor"     => ElementType.Capacitor,
-                "Inductor"      => ElementType.Inductor,
-                _ => ElementType.Resistor
-            };
+            SelectedType = TypeFromTag(tag);
 
             ElementName = TxtName.Text.Trim();
             if (string.IsNullOrWhiteSpace(ElementName))
@@ -135,7 +121,14 @@ namespace ElectroCalc.UI.Views
                 }
             }
 
-            ElementValue = v;
+            if (CmbUnit.SelectedItem is not ElementValueUnit unit || unit.ElementType != SelectedType)
+            {
+                MessageBox.Show("Выберите размерность значения элемента.", "Некорректные данные",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            ElementValue = unit.ToSi(v);
             InternalR = r;
             Polarity = ChkPolarity.IsChecked == true;
             PhaseDegrees = phase;
@@ -148,5 +141,20 @@ namespace ElectroCalc.UI.Views
                 System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out value) && !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static ElementType TypeFromTag(string? tag) => tag switch
+        {
+            "VoltageSource" => ElementType.VoltageSource,
+            "CurrentSource" => ElementType.CurrentSource,
+            "Capacitor" => ElementType.Capacitor,
+            "Inductor" => ElementType.Inductor,
+            _ => ElementType.Resistor
+        };
+
+        private void SetUnits(ElementType type)
+        {
+            CmbUnit.ItemsSource = ElementValueUnits.For(type);
+            CmbUnit.SelectedItem = ElementValueUnits.DefaultFor(type);
+        }
     }
 }

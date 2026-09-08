@@ -97,6 +97,17 @@ namespace ElectroCalc.Core.Models
         public List<BranchResult>  BranchResults  { get; } = new();
         public List<PhasorDiagramData> VectorDiagrams { get; } = new();
 
+        /// <summary>
+        /// Для аварийного 3Φ-расчёта здесь хранится исходный нормальный режим,
+        /// чтобы интерфейс и DOCX показывали оба состояния одним результатом.
+        /// </summary>
+        public ThreePhaseFaultSettings? ThreePhaseFault { get; set; }
+        public List<BranchResult> ReferenceBranchResults { get; } = new();
+        public Complex ReferenceComplexPowerGenerated { get; set; } = Complex.Zero;
+        public Complex ReferenceComplexPowerConsumed { get; set; } = Complex.Zero;
+
+        public bool HasReferenceScenario => ReferenceBranchResults.Count > 0;
+
         // Power balance
         public Complex TotalComplexPowerGenerated { get; set; } = Complex.Zero;
         public Complex TotalComplexPowerConsumed  { get; set; } = Complex.Zero;
